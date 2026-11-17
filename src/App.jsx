@@ -1,0 +1,115 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactFlow, Background, Controls, MiniMap, Handle, Position, MarkerType, ReactFlowProvider, useReactFlow, useNodesState } from '@xyflow/react';
+import { Activity, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Code2, Command, Copy, GitBranch, Layers3, Maximize2, Network, Play, Radio, RotateCcw, Search, Settings2, Square, Terminal, Workflow, X, Zap } from 'lucide-react';
+const duration = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`; };
+const running = a => a.status === 'running';
+const elapsed = (a, now) => a.durationMs ?? ((a.endedAt || now) - a.startedAt);
+const time = at => new Date(at).toLocaleTimeString([], { hour12: false });
+const post = async path => { const res = await fetch(path, { method: 'POST', headers: { 'X-Agent-Viewer': '1' } }); if (!res.ok) throw new Error('Collector request failed'); };
+function useStream() {
+  const [sessions, setSessions] = useState([]), [connected, setConnected] = useState(false);
+  useEffect(() => {
+    const source = new EventSource('/api/stream');
+    source.onopen = () => setConnected(true);
+    source.onmessage = e => { try { setSessions(JSON.parse(e.data)); } catch { setConnected(false); } };
+    source.onerror = () => setConnected(false);
+    return () => source.close();
+  }, []);
+  return [sessions, connected];
+}
+function AgentNode({ data, selected }) {
+  const { agent: a, now, slowAfter } = data;
+  const activeTools = Object.values(a.tools).filter(t => t.status === 'running');
+  const slow = activeTools.some(t => now - t.startedAt > slowAfter * 1000);
+  const Icon = a.id === 'root' ? Network : /test/i.test(a.name) ? Terminal : /review/i.test(a.name) ? Search : /plan/i.test(a.name) ? Workflow : Code2;
+  return <div className={`agent-node ${a.status} ${selected ? 'selected' : ''} ${slow ? 'slow' : ''}`}>
+    <Handle type="target" position={Position.Top} />
+    <div className="node-top"><span className="node-icon"><Icon size={16}/></span><span className="node-role">{a.id === 'root' ? 'COORDINATOR' : 'SUBAGENT'}</span><span className={`status-dot ${a.status}`}/></div>
+    <div className="node-title">{a.name}<span>{a.status === 'completed' ? <Check size={15}/> : a.status === 'failed' ? <X size={15}/> : null}</span></div>
+    <div className="node-model">{a.model || 'Model not reported'}</div>
+    <div className="node-action"><span className={`tiny-indicator ${running(a) ? 'pulse' : ''}`}/>{a.activity}</div>
+    <div className="node-footer"><span><Clock3 size={12}/>{duration(elapsed(a, now))}</span><span className={slow ? 'slow-label' : ''}>{slow ? 'Slow tool' : activeTools.length ? `${activeTools.length} tool${activeTools.length > 1 ? 's' : ''} running` : a.status}</span></div>
+    <Handle type="source" position={Position.Bottom}/>
+  </div>;
+}
+const nodeTypes = { agent: AgentNode };
+function arrange(session) {
+  const agents = session.agents;
+  const levels = Object.fromEntries(agents.map(a => [a.id, a.id === 'root' ? 0 : 1]));
+  const handoffTargets = new Set(session.edges.filter(e => e.kind !== 'delegation' && e.kind !== 'feedback').map(e => e.target));
+  const edges = session.edges.filter(e => e.kind !== 'feedback' && !(e.kind === 'delegation' && handoffTargets.has(e.target)));
+  // Feedback is excluded from layout constraints. Cyclic unknown inputs are bounded.
+  for (let i = 0; i < Math.min(agents.length, 7); i++) for (const e of edges) if (e.target !== 'root') levels[e.target] = Math.min(6, Math.max(levels[e.target] || 1, (levels[e.source] || 0) + 1));
+  const groups = {};
+  for (const a of agents) (groups[levels[a.id]] ||= []).push(a.id);
+  const positions = {};
+  for (const [level, ids] of Object.entries(groups)) ids.forEach((id, i) => { positions[id] = { x: 440 + (i - (ids.length - 1) / 2) * 320, y: 30 + Number(level) * 230 }; });
+  return positions;
+}
+function Canvas({ session, now, selected, onSelect, slowAfter, follow, setFollow }) {
+  const flow = useReactFlow();
+  const [positions, setPositions] = useState({});
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const signature = session.agents.map(a => a.id).join('|') + session.edges.map(e => e.id).join('|');
+  const layout = useMemo(() => arrange(session), [signature]);
+  useEffect(() => { if (follow) { const timer = setTimeout(() => flow.fitView({ padding: .22, duration: 450, maxZoom: 1 }), 100); return () => clearTimeout(timer); } }, [signature, follow]);
+  useEffect(() => {
+    setNodes(previous => session.agents.map(a => ({ ...previous.find(n => n.id === a.id), id: a.id, type: 'agent', position: positions[a.id] || layout[a.id] || { x: 0, y: 0 }, selected: a.id === selected, data: { agent: a, now, slowAfter } })));
+  }, [session, now, selected, slowAfter, positions, layout]);
+  const visible = new Set(session.agents.map(a => a.id));
+  const edges = session.edges.filter(e => visible.has(e.source) && visible.has(e.target)).map(e => ({ ...e, type: 'smoothstep', animated: e.kind === 'feedback' || running(session.agents.find(a => a.id === e.target)), markerEnd: { type: MarkerType.ArrowClosed, color: e.kind === 'feedback' ? '#f1b975' : '#57766c' }, label: e.label, style: { stroke: e.kind === 'feedback' ? '#f1b975' : e.kind === 'delegation' ? '#3b514a' : '#78cbae', strokeWidth: e.kind === 'feedback' ? 1.8 : 1.3, strokeDasharray: e.inferred ? '5 5' : undefined }, labelStyle: { fill: e.kind === 'feedback' ? '#f1b975' : '#9faeaa', fontSize: 10 }, labelBgStyle: { fill: '#141b1b', fillOpacity: .95 }, labelBgPadding: [7, 4], labelBgBorderRadius: 5, zIndex: e.kind === 'feedback' ? 2 : 0 }));
+  return <div className="canvas-shell">
+    <div className="canvas-toolbar"><span><span className="status-dot running"/>LIVE TOPOLOGY</span><div><button className={follow ? 'tool-button enabled' : 'tool-button'} onClick={() => setFollow(!follow)} title="Fit new agents into view"><Radio size={14}/> Follow</button><button className="tool-button" onClick={() => { setPositions({}); setTimeout(() => flow.fitView({ padding: .2, duration: 450 }), 50); }}><Layers3 size={14}/> Arrange</button><button className="icon-button" onClick={() => flow.fitView({ padding: .2, duration: 400 })} title="Fit graph"><Maximize2 size={15}/></button></div></div>
+    <ReactFlow nodes={nodes} onNodesChange={onNodesChange} edges={edges} nodeTypes={nodeTypes} onNodeClick={(_, n) => onSelect(n.id)} onNodeDragStart={() => setFollow(false)} onNodeDrag={(_, n) => setPositions(p => ({ ...p, [n.id]: n.position }))} onMoveStart={e => { if (e) setFollow(false); }} fitView minZoom={.2} maxZoom={1.6} nodesConnectable={false} deleteKeyCode={null}>
+      <Background color="#33403c" gap={22} size={1}/><Controls showInteractive={false}/><MiniMap nodeColor={n => n.data.agent.status === 'running' ? '#81d7b5' : '#48554f'} maskColor="rgba(12,17,17,.75)" pannable zoomable/>
+    </ReactFlow>
+    <div className="graph-legend"><span><i className="legend-line"/> Delegation / handoff</span><span><i className="legend-line feedback"/> Feedback loop</span><span><i className="legend-line inferred"/> Unconfirmed parent</span></div>
+    {session.notices[0] && <div className="structure-notice"><GitBranch size={14}/><span>{session.notices[0].message}</span></div>}
+  </div>;
+}
+function Inspector({ agent: a, now, onClose, slowAfter }) {
+  const [tab, setTab] = useState('Activity');
+  if (!a) return <aside className="inspector empty-inspector"><CircleDot size={30}/><h3>Look inside an agent</h3><p>Select any node to see its live activity, model and tools.</p></aside>;
+  const tools = Object.values(a.tools), active = tools.filter(t => t.status === 'running');
+  const longest = [...(active.length ? active : tools)].sort((x, y) => ((y.endedAt || now) - y.startedAt) - ((x.endedAt || now) - x.startedAt))[0];
+  return <aside className="inspector"><div className="inspector-heading"><span>AGENT INSPECTOR</span><button className="icon-button" onClick={onClose} aria-label="Close inspector"><X size={16}/></button></div>
+    <div className="inspector-identity"><span className={`big-agent-icon ${a.status}`}><Code2 size={23}/></span><div><h2>{a.name}</h2><span className={`status-pill ${a.status}`}><span className={`status-dot ${a.status}`}/>{a.status}</span></div></div>
+    <div className="model-box"><span>MODEL</span><strong>{a.model || 'Not reported by runtime'}</strong></div>
+    <div className="agent-stats"><div><span>Elapsed</span><strong>{duration(elapsed(a, now))}</strong></div><div><span>Tool calls</span><strong>{tools.length}</strong></div><div><span>Tokens</span><strong>{a.tokens ? a.tokens.toLocaleString() : '—'}</strong></div></div>
+    <div className="current-action"><span className="eyebrow">CURRENT ACTIVITY</span><p><Activity size={14}/>{a.activity}</p><small>Last event {duration(now - a.lastActivity)} ago</small></div>
+    {longest && <div className={`bottleneck ${active.some(t => now - t.startedAt > slowAfter * 1000) ? 'warning' : ''}`}><Clock3 size={15}/><div><strong>{longest.status === 'running' ? 'Longest current tool' : 'Longest observed tool'}</strong><p>{longest.name} · {duration((longest.endedAt || now) - longest.startedAt)}</p></div></div>}
+    <div className="inspector-tabs">{['Activity', 'Tools', 'Details'].map(t => <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{t}{t === 'Tools' && <span>{tools.length}</span>}</button>)}</div>
+    <div className="inspector-content">{tab === 'Activity' ? <>{a.output && <div className="output"><span className="eyebrow">LATEST OUTPUT</span><pre>{a.output}</pre></div>}<div className="activity-list">{a.events.length ? a.events.map((e, i) => <div className="activity-item" key={`${e.at}:${i}`}><i/><div><span>{e.type.replaceAll('.', ' / ')}</span><p>{e.text}</p><time>{time(e.at)}</time></div></div>) : <p className="muted">Listening for events…</p>}</div></> : tab === 'Tools' ? <>{[...tools].reverse().map(t => <details className="tool-detail" key={t.id}><summary><span className={`status-dot ${t.status}`}/><strong>{t.name}</strong><span>{duration((t.endedAt || now) - t.startedAt)}</span><ChevronDown size={13}/></summary><label>Arguments</label><pre>{t.args || 'Not reported'}</pre>{t.result && <><label>Result</label><pre>{t.result}</pre></>}</details>)}{!tools.length && <p className="muted">No tool calls observed yet.</p>}</> : <dl className="details-list"><dt>Task</dt><dd>{a.task || 'Not reported'}</dd><dt>Instance ID</dt><dd>{a.id}</dd><dt>Parent</dt><dd>{a.parentId || 'Root or unconfirmed'}</dd><dt>Model request time</dt><dd>{a.modelMs ? duration(a.modelMs) : 'Not reported'}</dd><dt>Turns observed</dt><dd>{a.turns}</dd><dt>Timing</dt><dd>Elapsed time is wall time. Tools can overlap; their durations are not summed as agent time.</dd></dl>}</div>
+  </aside>;
+}
+function ConnectModal({ onClose }) {
+  const [copied, setCopied] = useState(false);
+  const command = 'npm run connect';
+  return <div className="modal-backdrop" onClick={onClose}><section className="connect-modal" onClick={e => e.stopPropagation()}><button className="modal-close icon-button" onClick={onClose} aria-label="Close setup"><X size={20}/></button><span className="modal-icon"><Terminal size={27}/></span><p className="eyebrow">LOCAL CONNECTION</p><h2>Bring your agents into view.</h2><p>The collector is ready. Install the bridge once, then start a new Copilot CLI session.</p><label>01 · In the Spy project folder</label><div className="command-box"><code>{command}</code><button className="icon-button" onClick={async () => { try { await navigator.clipboard.writeText(command); setCopied(true); } catch { setCopied(false); } }}>{copied ? <Check size={17}/> : <Copy size={17}/>}</button></div><label>02 · In your working repository</label><div className="command-box"><code>copilot --experimental</code></div><p className="setup-note">Uses Copilot’s experimental session extension API. Your CLI must support and enable extensions. Already-running sessions need the extension loaded; no automatic terminal attachment is assumed.</p><div className="modal-footer"><span><span className="status-dot running"/> Memory only · localhost</span><button className="primary-button" onClick={onClose}>Got it <ArrowUpRight size={15}/></button></div></section></div>;
+}
+export default function App() {
+  const [sessions, connected] = useStream();
+  const [sessionId, setSessionId] = useState(null), [selected, setSelected] = useState(null), [now, setNow] = useState(Date.now()), [showConnect, setShowConnect] = useState(false), [follow, setFollow] = useState(true), [slowAfter, setSlowAfter] = useState(30), [error, setError] = useState(''), [search, setSearch] = useState(''), [focused, setFocused] = useState(false);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
+  const session = sessions.find(s => s.id === sessionId) || sessions[0];
+  useEffect(() => { setSelected(null); setFollow(true); }, [session?.id]);
+  const agent = session?.agents.find(a => a.id === selected);
+  const agents = session?.agents || [];
+  const active = agents.filter(running), failed = agents.filter(a => a.status === 'failed');
+  const allTools = agents.flatMap(a => Object.values(a.tools).map(t => ({ ...t, agent: a.name, agentId: a.id })));
+  const activeTools = allTools.filter(t => t.status === 'running').sort((a,b) => a.startedAt - b.startedAt);
+  const slowTools = activeTools.filter(t => now - t.startedAt > slowAfter * 1000);
+  const demo = sessions.some(s => s.source === 'demo');
+  const action = async path => { try { setError(''); await post(path); } catch(e) { setError(e.message); } };
+  return <div className={`app ${focused ? 'focused' : ''}`}><aside className="sidebar"><a className="brand" href="/" aria-label="Spy home"><span><Network size={23}/></span><div>spy<span className="brand-period">.</span><small>COPILOT CLI WORKBENCH</small></div></a><div className="workspace-label"><span className="workspace-avatar">A</span><div>Local workspace<small>On this machine</small></div><ChevronDown size={14}/></div><div className="nav-title">WORKSPACE</div><div className="nav-active"><Workflow size={17}/>Live sessions<span>{sessions.length}</span></div><div className="sidebar-section-title"><span>SESSIONS</span><Radio size={13}/></div><div className="session-search"><Search size={14}/><input aria-label="Search sessions" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a session…"/><kbd>⌕</kbd></div><div className="sessions">{sessions.filter(s => (s.name + s.cwd).toLowerCase().includes(search.toLowerCase())).map(s => <button key={s.id} className={`session-card ${s.id === session?.id ? 'current' : ''}`} onClick={() => setSessionId(s.id)}><span className={`status-dot ${s.status === 'connected' ? 'running' : s.status}`}/><div><strong>{s.name}</strong><small>{s.cwd.split(/[\\/]/).filter(Boolean).slice(-1)[0] || 'Local session'}</small><span>{s.agents.filter(running).length} running <i>·</i> {s.source === 'demo' ? 'DEMO' : 'LIVE'}</span></div><ChevronRight size={13}/></button>)}{!sessions.length && <div className="no-sessions">Your connected sessions<br/>will appear here.</div>}</div><div className="sidebar-bottom"><div className="local-info"><span><span className={`status-dot ${connected ? 'running' : 'failed'}`}/>{connected ? 'Collector connected' : 'Reconnecting…'}</span><small>Volatile memory · no database</small></div><button className="connect-button" onClick={() => setShowConnect(true)}><Terminal size={16}/>Connect Copilot<ArrowUpRight size={15}/></button></div></aside>
+    <main><header className="topbar"><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={12}/><strong>Live sessions</strong></div><div className="topbar-actions"><span className="keyboard-hint"><Command size={12}/> LOCAL FIRST</span><button className="demo-button" onClick={() => action(demo ? '/api/demo/stop' : '/api/demo/start')}>{demo ? <Square size={12}/> : <Play size={12}/>} {demo ? 'Stop demo' : 'Run demo'}</button><button className="avatar" onClick={() => setShowConnect(true)} title="Connection setup">A</button></div></header>
+    <div className="page-heading"><div><div className="eyebrow"><span className="status-dot running"/> THE AGENT CONTROL ROOM</div><h1>See the work happen<span>.</span></h1><p>Every agent. Every handoff. One live view.</p></div><button className="secondary-button" onClick={() => setShowConnect(true)}><Terminal size={15}/>Connect session<ArrowUpRight size={15}/></button></div>
+    {error && <div className="error-banner">{error}<button onClick={() => setError('')}>Dismiss</button></div>}
+    <div className="overview"><div><span><Layers3 size={15}/>Connected sessions</span><strong>{sessions.filter(s => s.status !== 'disconnected').length}<small>{sessions.length ? `${sessions.filter(s=>s.source==='live').length} live · ${sessions.filter(s=>s.source==='demo').length} demo` : 'Waiting for a connection'}</small></strong></div><div><span><Zap size={15}/>Agents running</span><strong className="mint">{active.length}<small>{session ? 'In selected session' : 'Across your session graph'}</small></strong></div><div><span><GitBranch size={15}/>Graph connections</span><strong>{session?.edges.length || 0}<small>{session?.edges.some(e=>e.kind==='feedback') ? 'Feedback loop detected' : 'Delegations & handoffs'}</small></strong></div><div><span><Clock3 size={15}/>Slow tools</span><strong className={slowTools.length ? 'amber' : ''}>{slowTools.length}<small>Running longer than {slowAfter}s</small></strong></div></div>
+    <section className="workbench"><div className="workbench-header"><div><Network size={18}/><h2>{session ? session.name : 'Your live agent graph'}</h2>{session && <span className={`source-badge ${session.source}`}>{session.source === 'demo' ? 'SIMULATED DEMO' : 'LIVE CLI'}</span>}</div><div><button className="tool-button focus-toggle" onClick={() => setFocused(!focused)}><Maximize2 size={14}/>{focused ? 'Exit focus' : 'Focus graph'}</button><label className="threshold"><Settings2 size={14}/><span>Slow after</span><select value={slowAfter} onChange={e=>setSlowAfter(Number(e.target.value))}>{[10,30,60,120].map(n=><option key={n} value={n}>{n}s</option>)}</select></label></div></div>
+    {session?.status === 'disconnected' && <div className="disconnected-banner">Session heartbeat lost. Node states are stale until the bridge reconnects.</div>}
+    <div className={`graph-and-inspector ${agent ? 'has-selection' : ''}`}>{session ? <ReactFlowProvider key={session.id}><Canvas session={session} now={now} selected={selected} onSelect={setSelected} slowAfter={slowAfter} follow={follow} setFollow={setFollow}/></ReactFlowProvider> : <div className="empty-canvas"><div className="empty-network"><Network size={55}/><span className="orbit one"/><span className="orbit two"/></div><span className="eyebrow">WAITING FOR YOUR FIRST SESSION</span><h2>Your agents, connected.</h2><p>Watch your organisation take shape as agents<br/>delegate, run tools and verify their work.</p><div><button className="primary-button" onClick={() => setShowConnect(true)}>Connect Copilot<ArrowUpRight size={15}/></button><button className="secondary-button" onClick={() => action('/api/demo/start')}><Play size={14}/>Try a live demo</button></div><small>Local collector · React canvas · nothing saved</small></div>}<Inspector agent={agent} now={now} slowAfter={slowAfter} onClose={()=>setSelected(null)}/></div>
+    <div className="workbench-footer"><span><span className={`status-dot ${connected ? 'running' : 'failed'}`}/>{connected ? 'Streaming' : 'Disconnected'}<i>·</i> Updates as events arrive</span><span>{agents.length} nodes <i>·</i> Drag to arrange <i>·</i> Scroll to zoom</span></div></section>
+    <section className="activity-strip"><div className="strip-title"><div><Activity size={16}/><h2>Happening now</h2><span>{activeTools.length}</span></div><small>{session?.source === 'demo' ? 'Synthetic events · not your Copilot activity' : 'Observed tool executions'}</small></div>{activeTools.length ? <div className="tool-rows">{activeTools.slice(0,4).map(t=><button className="live-tool-row" key={t.id} onClick={()=>setSelected(t.agentId)}><span className="terminal-icon"><Terminal size={14}/></span><strong>{t.agent}</strong><span>{t.name}</span><div className="time-track"><i style={{width: `${Math.min(100, (now-t.startedAt)/(slowAfter*10))}%`}}/></div><time className={now-t.startedAt>slowAfter*1000 ? 'amber' : ''}>{duration(now-t.startedAt)}</time><ArrowUpRight size={14}/></button>)}</div> : <div className="quiet-strip"><span className="status-dot idle"/>{session ? 'No tools executing right now. Listening for the next event.' : 'Connect a session or run the demo to see live activity.'}</div>}</section>
+    <footer className="page-footer"><span><span className="status-dot running"/> Built for the moment. No session history retained.</span><span>SPY <i>/</i> 0.1</span></footer></main>{showConnect && <ConnectModal onClose={()=>setShowConnect(false)}/>}</div>;
+}
