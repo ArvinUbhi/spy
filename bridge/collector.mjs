@@ -4,14 +4,22 @@ import { open, stat, unlink, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const delay = ms => new Promise(r=>setTimeout(r,ms));
-export async function ensureCollector({ endpoint='http://127.0.0.1:4317', script=resolve(dirname(fileURLToPath(import.meta.url)),'runtime/server/index.mjs'), lockDirectory=resolve(dirname(script),'..'), timeoutMs=8000, spawnProcess=spawn }={}) {
+export async function ensureCollector({ endpoint='http://127.0.0.1:4317', script=resolve(dirname(fileURLToPath(import.meta.url)),'runtime/server/index.mjs'), lockDirectory=resolve(dirname(script),'..'), timeoutMs=8000, spawnProcess=spawn,requiredFeatures=[],allowReplace=false }={}) {
   const url=new URL(endpoint);
   if(url.protocol!=='http:' || !['127.0.0.1','localhost'].includes(url.hostname)) throw Error('Spy requires a local HTTP collector');
+  let replaced=false;
   const health=async()=>{
     let response;
     try { response=await fetch(new URL('/api/health',url),{signal:AbortSignal.timeout(300)}); } catch {return null;}
     let data;try{data=await response.json();}catch{throw Error('Spy port is occupied by another service');}
     if(!response.ok || data.service!=='spy' || data.protocol!==1)throw Error('Spy port is occupied by another service');
+    if(!requiredFeatures.every(feature=>data.features?.includes(feature))){
+      if(!allowReplace)throw Error('Spy collector is older than this bridge. Run the latest Spy startup script.');
+      if(!replaced){if(!Number.isInteger(data.pid)||data.pid<=1||data.pid===process.pid)throw Error('Cannot safely identify the previous Spy collector');
+        replaced=true;try{process.kill(data.pid,'SIGTERM');}catch(error){if(error.code!=='ESRCH')throw error;}
+      }
+      return null;
+    }
     return data;
   };
   const ready=await health();if(ready)return {...ready,started:false};

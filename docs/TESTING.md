@@ -6,18 +6,19 @@ The repository contains executable tests and reproducible benchmarks. These repo
 
 | Layer | Checks |
 |---|---|
+| Skills / context / states | Agent-scoped invocations, available catalogs, prompt/result capture, provenance, overlapping waits, denial/resume, stale connections and bounded payloads |
 | Graph layout | Handoff order, parallel branches, feedback-loop stability, cyclic input, deterministic positions |
 | Event projection | Parent/child correlation, model attribution, lifecycle timing, native shell output, deduplication, heartbeat expiry |
 | Bounds and validation | Session/agent/tool/output caps, malformed IDs and metrics, prototype-safe instance IDs |
 | Bridge | Reasoning exclusion, clipping, Unicode-aware batching, retry order, overflow reporting |
-| Shared startup | Eight concurrent sessions start exactly one collector; reuse, foreign-service rejection and symlinked installation paths (including macOS /var aliases) |
+| Shared startup | Eight concurrent sessions start exactly one collector; reuse, foreign-service rejection and symlinked installation paths (including macOS /var aliases), verified collector upgrades |
 | Resources / live projection | Collector CPU/RSS endpoint, bridge resource attribution, selected-session-only detail streaming |
 | Installer | Repeat installation, companion module, safe removal, unrelated-file preservation |
 | HTTP/SSE | Bridge headers, foreign/malformed origins, malformed JSON, streamed state |
 | Release ZIP | Extracted build serves React without node_modules; extension installation succeeds |
 | Browser | Empty startup/setup, live nodes and edges, agent inspector/model, parallel verification, feedback loop, mobile graph focus |
 
-The local Node suite passed **29 tests** on Node 24/Linux. GitHub Actions runs it on Node 22 and 24 across Windows, macOS and Linux. The initial six-platform build/ZIP matrix passed; the expanded suite's authoritative status is the latest [Check Spy workflow](https://github.com/ArvinUbhi/spy/actions/workflows/checks.yml).
+The local Node suite passed **40 tests** on Node 24/Linux. GitHub Actions runs it on Node 22 and 24 across Windows, macOS and Linux. The initial six-platform build/ZIP matrix passed; the expanded suite's authoritative status is the latest [Check Spy workflow](https://github.com/ArvinUbhi/spy/actions/workflows/checks.yml).
 
 Browser tests run in Chromium on GitHub Actions. Do not treat their source alone as a pass: inspect the workflow's Browser job result. Local interactive browser checks covered rendering, clicking agents and graph focus.
 

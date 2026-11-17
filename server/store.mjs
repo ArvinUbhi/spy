@@ -1,6 +1,7 @@
+import { observe, recordContext, delegatedPrompt } from './observability.mjs';
 // Volatile current-session projection. No database, log file, or browser storage.
 const MAX_SESSIONS = 40, MAX_AGENTS = 160, MAX_EVENTS = 60;
-const terminal = s => ['completed', 'failed'].includes(s);
+const terminal = s => ['completed', 'failed', 'cancelled'].includes(s);
 const clip = value => (typeof value === 'string' ? value : JSON.stringify(value ?? '')).slice(0, 6000);
 export class Store {
   sessions = new Map();
@@ -8,12 +9,12 @@ export class Store {
     if (!packet || typeof packet.sessionId !== 'string' || packet.sessionId.length > 200) throw new Error('sessionId required');
     const event = packet.event;
     if (!event || typeof event.type !== 'string' || event.type.length > 100 || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) throw new Error('event.type and event.data required');
-    for (const id of [event.agentId, event.data.toolCallId, event.data.agentId, event.data.source, event.data.target]) if (id !== undefined && (typeof id !== 'string' || id.length > 200)) throw new Error('Invalid instance identifier');
+    for (const id of [event.agentId, event.data.toolCallId, event.data.agentId, event.data.source, event.data.target, event.data.requestId, event.data.ownerAgentId]) if (id !== undefined && (typeof id !== 'string' || id.length > 200)) throw new Error('Invalid instance identifier');
     for (const key of ['inputTokens', 'outputTokens', 'totalTokens', 'duration', 'durationMs']) if (event.data[key] !== undefined && (!Number.isFinite(event.data[key]) || event.data[key] < 0)) throw new Error('Invalid metric: ' + key);
     let s = this.sessions.get(packet.sessionId);
     if (!s) {
       if (this.sessions.size >= MAX_SESSIONS) this.sessions.delete(this.sessions.keys().next().value);
-      s = { id: packet.sessionId, name: clip(packet.name || 'Copilot session'), cwd: clip(packet.cwd || ''), source: packet.source === 'demo' ? 'demo' : 'live', startedAt: now, lastSeen: now, status: 'connected', agents: Object.create(null), edges: [], aliases: Object.create(null), calls: Object.create(null), seen: new Set(), notices: [] };
+      s = { id: packet.sessionId, name: clip(packet.name || 'Copilot session'), cwd: clip(packet.cwd || ''), source: packet.source === 'demo' ? 'demo' : 'live', startedAt: now, lastSeen: now, status: 'connected', agents: Object.create(null), edges: [], aliases: Object.create(null), calls: Object.create(null), pendingRequests: Object.create(null), contexts: [], skillCatalog: [], agentCatalog: [], seen: new Set(), notices: [] };
       this.sessions.set(s.id, s);
     }
     s.lastSeen = now;
@@ -30,9 +31,11 @@ export class Store {
           if (!old) return null;
           delete s.agents[old.id];
           s.edges = s.edges.filter(e => e.source !== old.id && e.target !== old.id);
+          s.contexts=s.contexts.filter(c=>c.source!==old.id&&c.target!==old.id);
+          for(const [key,owner] of Object.entries(s.pendingRequests))if(owner===old.id)delete s.pendingRequests[key];
           for (const [key, value] of Object.entries(s.aliases)) if (value === old.id) delete s.aliases[key];
         }
-        s.agents[id] = { id, name: name || (id === 'root' ? 'Orchestrator' : 'Agent ' + id.slice(0, 8)), model: null, status: 'running', startedAt: at, lastActivity: at, activity: 'Waiting for activity', tools: Object.create(null), events: [], tokens: 0, modelMs: 0, turns: 0, kind: id === 'root' ? 'coordinator' : 'worker' };
+        s.agents[id] = { id, name: name || (id === 'root' ? 'Orchestrator' : 'Agent ' + id.slice(0, 8)), model: null, status: id==='root'?'idle':'unknown', startedAt: at, lastActivity: at, activity: 'Waiting for activity', tools: Object.create(null), events: [], tokens: 0, modelMs: 0, turns: 0, skills: [], contextMode: 'unknown', kind: id === 'root' ? 'coordinator' : 'worker' };
       }
       return s.agents[id];
     };
@@ -40,7 +43,8 @@ export class Store {
     if (type === 'viewer.heartbeat') { if (s.status === 'disconnected') s.status = 'connected'; return s; }
     if (type === 'viewer.disconnect' || type === 'session.shutdown') { s.status = 'disconnected'; return s; }
     if (type === 'viewer.metadata') { if (d.name) s.name = clip(d.name); return s; }
-    const origin = event.agentId ? (s.aliases[event.agentId] || event.agentId) : 'root';
+    const requestedOwner=s.pendingRequests[d.requestId] || d.ownerAgentId;
+    const origin=requestedOwner?(s.aliases[requestedOwner]||requestedOwner):event.agentId?(s.aliases[event.agentId]||event.agentId):'root';
     if (type === 'tool.execution_start' && d.toolCallId) { s.calls[d.toolCallId] = origin; if (Object.keys(s.calls).length > 1000) delete s.calls[Object.keys(s.calls)[0]]; }
     let id = origin;
     if (type.startsWith('subagent.') && d.toolCallId) {
@@ -64,6 +68,7 @@ export class Store {
         if (parentId !== id && !s.edges.some(e => e.target === id)) s.edges.push({ id: 'spawn:' + id, source: parentId, target: id, kind: 'delegation', inferred: !parent, label: parent ? 'delegates' : 'parent unconfirmed' });
         agent(parentId);
         a.parentId = parentId;
+        delegatedPrompt(s,a,d.toolCallId,at);
       }
       if (type === 'subagent.completed' || type === 'subagent.failed') {
         a.status = type.endsWith('failed') ? 'failed' : 'completed'; a.endedAt = at; a.activity = d.error ? clip(d.error) : 'Task complete';
@@ -98,14 +103,16 @@ export class Store {
       if (Object.keys(a.tools).length > 120) { const old = Object.values(a.tools).find(t => t.status !== 'running'); if (old) delete a.tools[old.id]; }
     }
     if (['tool.execution_partial_result', 'tool.execution_progress', 'tool.shell_output'].includes(type)) {
-      const owner = s.agents[s.calls[d.toolCallId]] || a;
+      const owner = s.agents[s.calls[d.toolCallId]] || s.agents[s.agents[s.aliases[d.toolCallId]]?.parentId] || a;
       const t = owner.tools[d.toolCallId];
       if (t) t.result = ((t.result || '') + clip(d.partialOutput || d.text || d.output || d.progressMessage || '')).slice(-10000);
     }
     if (type === 'tool.execution_complete') {
-      const owner = s.agents[s.calls[d.toolCallId]] || a;
+      const owner = s.agents[s.calls[d.toolCallId]] || s.agents[s.agents[s.aliases[d.toolCallId]]?.parentId] || a;
       const t = owner.tools[d.toolCallId];
       if (t) { t.endedAt = at; t.status = d.success === false ? 'failed' : 'completed'; t.result = clip(d.result ?? d.error); }
+      const child=s.agents[s.aliases[d.toolCallId]];
+      if(child && child.id!==owner.id && child.parentId===owner.id && d.result!==undefined)recordContext(s,{id:`result:${d.toolCallId}`,source:child.id,target:owner.id,kind:'result',label:'Returned result',payload:d.result,evidence:'runtime',scope:'Returned tool result only'},at);
       delete s.calls[d.toolCallId];
       owner.activity = 'Tool finished';
     }
@@ -118,23 +125,29 @@ export class Store {
       if (!s.edges.some(e => e.id === edgeId)) s.edges.push({ id: edgeId, source: d.source, target: d.target, kind: d.kind || 'handoff', label: clip(d.label || 'handoff'), inferred: false });
       s.edges = s.edges.slice(-400);
     }
+    if(type==='viewer.context_handoff' && d.source && d.target){
+      const source=s.aliases[d.source]||d.source,target=s.aliases[d.target]||d.target;
+      if(agent(source)&&agent(target)){recordContext(s,{...d,id:d.id||event.id,source,target,evidence:'orchestrator'},at);const edgeId='context:'+source+':'+target;
+        if(!s.edges.some(e=>e.id===edgeId))s.edges.push({id:edgeId,source,target,kind:'context',label:'Context handoff',inferred:false});s.edges=s.edges.slice(-400);}
+    }
+    observe(s,a,event,at);
     if (type === 'viewer.structure_change') { s.notices.unshift({ at, message: clip(d.message) }); s.notices = s.notices.slice(0, 12); }
     if (!['assistant.message_delta', 'assistant.reasoning_delta', 'assistant.reasoning'].includes(type)) {
-      a.events.unshift({ at, type, text: clip(d.intent || d.content || d.error || d.toolName || d.agentDisplayName || d.model || type) });
+      a.events.unshift({ at, type, text: clip((type==='skill.invoked'?d.name:null) || d.intent || d.content || d.error || d.toolName || d.agentDisplayName || d.model || d.name || d.reason || type) });
       a.events = a.events.slice(0, MAX_EVENTS);
     }
     return s;
   }
   snapshot(now = Date.now()) {
     for (const [id, s] of this.sessions) if (now - s.lastSeen > 10 * 60_000) this.sessions.delete(id);
-    return [...this.sessions.values()].map(({ aliases, calls, seen, ...s }) => ({ ...s, status: now - s.lastSeen > 35_000 ? 'disconnected' : s.status, agents: Object.values(s.agents) }));
+    return [...this.sessions.values()].map(({ aliases, calls, pendingRequests, seen, ...s }) => { const status=now-s.lastSeen>35_000?'disconnected':s.status;return {...s,status,agents:Object.values(s.agents).map(a=>status==='disconnected'?{...a,connectionLost:true}:a)}; });
   }
   liveView(selectedId,now=Date.now()) {
     const all=this.snapshot(now);
     const selected=all.find(s=>s.id===selectedId) || all.find(s=>s.source==='live' && s.status!=='disconnected') || all[0];
     return {selectedSessionId:selected?.id || null,sessions:all.map(s=>{
-      const summary={id:s.id,name:s.name,cwd:s.cwd,source:s.source,status:s.status,startedAt:s.startedAt,lastSeen:s.lastSeen,runningCount:s.agents.filter(a=>a.status==='running').length,nodeCount:s.agents.length,bridgeMetrics:s.bridgeMetrics};
-      return s.id===selected?.id?{...s,...summary}:{...summary,agents:[],edges:[],notices:[]};
+      const summary={id:s.id,name:s.name,cwd:s.cwd,source:s.source,status:s.status,startedAt:s.startedAt,lastSeen:s.lastSeen,runningCount:s.status==='disconnected'?0:s.agents.filter(a=>a.status==='running').length,waitingCount:s.status==='disconnected'?0:s.agents.filter(a=>a.status==='waiting'||a.status==='blocked').length,nodeCount:s.agents.length,bridgeMetrics:s.bridgeMetrics};
+      return s.id===selected?.id?{...s,...summary}:{...summary,agents:[],edges:[],contexts:[],skillCatalog:[],agentCatalog:[],notices:[]};
     })};
   }
 

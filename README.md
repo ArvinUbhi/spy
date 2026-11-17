@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/ArvinUbhi/spy/actions/workflows/checks.yml/badge.svg)](https://github.com/ArvinUbhi/spy/actions/workflows/checks.yml)
 
-A live React graph for your **GitHub Copilot CLI** agents. See delegations, feedback loops, models, tools and timings. Click agents to inspect their activity; drag nodes to arrange the view. Spy also reports its collector and bridge CPU/memory use.
+A live React graph for your **GitHub Copilot CLI** agents. See delegations, skills, context handoffs, models, tools, timings and running/waiting/blocked/idle states. Click agents to inspect their activity; drag nodes to arrange the view. Spy also reports its collector and bridge CPU/memory use.
 
 ## Install
 
@@ -22,4 +22,4 @@ Spy keeps current state in memory only. The collector exits after two idle minut
 
 Development: `npm ci`, `npm start`. Checks: `npm test`, `npm run benchmark`. Package: `npm run build`, `npm run package`, `npm run verify:zip`.
 
-**Integration status:** automated collector/bridge/startup/browser tests use synthetic events. Real signed-in Copilot CLI validation is still required. Feedback edges need explicit orchestration metadata; arranging the view does not rewrite a running workflow.
+**Integration status:** automated collector/bridge/startup/browser tests use synthetic events. Real signed-in Copilot CLI validation is still required. Full-context sharing and custom feedback edges need explicit orchestration metadata; arranging the view does not rewrite a running workflow.

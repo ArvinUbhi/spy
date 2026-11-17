@@ -21,3 +21,9 @@ test('batch payloads stay within collector limits for multi-byte output', () => 
   while (buffer.size) { const batch = buffer.take(); count += batch.length; assert.ok(Buffer.byteLength(JSON.stringify(batch)) < 512000); }
   assert.equal(count, 100);
 });
+test('custom context metadata rejects missing participants and invalid states',async()=>{
+ const {metadataEvent}=await import('../bridge/core.mjs');
+ assert.throws(()=>metadataEvent({type:'viewer.context_handoff',source:'a'}),/distinct/);
+ assert.throws(()=>metadataEvent({type:'viewer.agent_state',state:'guessed'}),/Valid state/);
+ assert.deepEqual(metadataEvent({type:'viewer.context_mode',agentId:'a',mode:'isolated'}),{type:'viewer.context_mode',agentId:'a',data:{mode:'isolated'}});
+});

@@ -49,10 +49,18 @@ The bridge uses a bounded queue and batch limits. Live projection is coalesced a
 
 ## Update or remove
 
-To update, extract a new release and run its startup script. To remove the bridge, run `node scripts/install-bridge.mjs --remove` from the extracted folder (or `npm run disconnect` in a checkout). Uninstall preserves unrelated files and the cached runtime so it does not delete files under a running collector. After closing Spy and its collector, the remaining `~/.copilot/extensions/spy/` cache can be removed.
+To update, extract a new release and run its startup script. If a verified older Spy collector lacks the new features, the launcher restarts only that collector automatically. Its volatile view resets; Copilot sessions and tasks continue. Ask `Reload my extensions` in existing sessions so their bridges forward the new events. To remove the bridge, run `node scripts/install-bridge.mjs --remove` from the extracted folder (or `npm run disconnect` in a checkout). Uninstall preserves unrelated files and the cached runtime so it does not delete files under a running collector. After closing Spy and its collector, the remaining `~/.copilot/extensions/spy/` cache can be removed.
 
 ## Source development
 
 A GitHub **Code → Download ZIP** source archive also launches with the same scripts, but its first run needs npm access to install/build. For development: `npm ci`, then `npm start`. This development server does not install the bridge automatically. Run `npm run build` and `npm run connect` to install the current bridge/runtime.
 
 See the [official extension guide](https://docs.github.com/en/copilot/tutorials/create-an-extension) for version-specific extension controls.
+
+## Skills, context and state observations
+
+Skill badges show invocations observed for each agent. The Skills tab separates invocation records from the available session catalog; it never assumes subagents inherit skills. Skill bodies are bounded excerpts and are not labelled as continuously active. Configured agents are listed separately from live invocations. Catalogs are requested once when the bridge joins, with unsupported APIs tolerated.
+
+Permission and user-input events produce waiting states; denied permission produces blocked until new execution resumes. Completed/cancelled agents stay inactive. A lost connection marks state as stale. Use the State filter to focus on running, waiting, blocked or inactive agents.
+
+Click a graph edge or an agent's Context tab to inspect recorded transfers. Native task-tool prompts and returned results are captured where available and labelled runtime-observed. Other relationships can be reported through the `spy_observe` extension tool or the local event endpoint. They are visibly labelled orchestrator-reported, including any shared/isolated claim. Missing context is shown as unknown, not inferred from tokens or delegation. Payloads stay local and bounded; avoid including credentials in custom metadata.

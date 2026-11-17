@@ -21,7 +21,7 @@ const flag=process.argv.indexOf('--port');
 const port=flag>=0?process.argv[flag+1]:(process.env.PORT || new URL(process.env.SPY_URL || 'http://127.0.0.1:4317').port || '4317');
 const endpoint=`http://127.0.0.1:${port}`;
 const installed=process.env.SPY_EXTENSION_DIR || resolve(process.env.COPILOT_HOME || resolve(homedir(),'.copilot'),'extensions/spy');
-const collector=await ensureCollector({endpoint,script:resolve(installed,'runtime/server/index.mjs'),lockDirectory:resolve(installed,'runtime')});
+const collector=await ensureCollector({endpoint,script:resolve(installed,'runtime/server/index.mjs'),lockDirectory:resolve(installed,'runtime'),requiredFeatures:['skill-events','context-transfers','agent-states'],allowReplace:true});
 console.log(`Spy is running in the background (PID ${collector.pid}).\n${endpoint}\nYou can close this terminal. New Copilot sessions share this collector.`);
 if(!process.argv.includes('--no-open')) {
   const program=process.platform==='win32'?'cmd.exe':process.platform==='darwin'?'open':'xdg-open';

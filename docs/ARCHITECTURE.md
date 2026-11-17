@@ -4,17 +4,17 @@ Spy is a local observer with a React/React Flow canvas, a dependency-free produc
 
 ## Data path
 
-The extension joins its current Copilot session using the experimental `joinSession()` API. It projects supported activity, usage, tool and lifecycle events into a bounded memory queue. Private/opaque reasoning is excluded; large visible outputs are clipped. It batches events to a verified localhost Spy collector without blocking Copilot on delivery.
+The extension joins its current Copilot session using the experimental `joinSession()` API. It projects supported activity, usage, tool and lifecycle events into a bounded memory queue. Native skill invocation, catalog and permission/input events are included. Private/opaque reasoning is excluded; large visible outputs are clipped. It batches events to a verified localhost Spy collector without blocking Copilot on delivery.
 
 User-level installation copies the collector and built React assets alongside the extension. A startup lock coordinates concurrent sessions; exactly one collector binds the configured port. Foreign services are rejected by a protocol health check before telemetry is delivered. Temporary startup metadata is separate from session history.
 
-The collector correlates native subagent invocations with spawning tool calls and available instance/parent metadata. The envelope `parentId` is chronological ordering and is not an agent hierarchy. Unknown relationships are visibly marked. Explicit `viewer.edge` events identify workflow feedback/handoff relationships that cannot be established from native delegation alone.
+The collector correlates native subagent invocations with spawning tool calls and available instance/parent metadata. The envelope `parentId` is chronological ordering and is not an agent hierarchy. Unknown relationships are visibly marked. Native task-tool prompts/results form runtime-observed context-transfer records. Explicit `viewer.context_handoff` and `viewer.context_mode` events (or the `spy_observe` extension tool) record orchestrator-reported sharing metadata with visible provenance. Unknown context isolation remains unknown. Explicit `viewer.edge` events identify workflow feedback/handoff relationships that cannot be established from native delegation alone.
 
 One browser subscription receives the selected graph plus lightweight summaries of the other sessions. Graph updates are coalesced at 100 ms; collector metrics use small separate one-second events. Bridges send a heartbeat/resource sample every five seconds. SSE reconnect sends the current projection. Failed or missed historical events cannot be recovered after collector restart.
 
 ## Memory limits
 
-40 sessions, 160 agents/session, 60 activity entries/agent, 120 tools/agent, 400 explicit edges/session and 300 queued events/bridge. Additional active tools are omitted with a visibility-cap message; older completed tools/nodes are evicted first. Disconnected sessions expire after ten minutes. These limits bound display state rather than constrain Copilot's actual work.
+40 sessions, 160 agents/session, 60 activity entries/agent, 120 tools/agent, 400 explicit edges/session and 300 queued events/bridge. Additional active tools are omitted with a visibility-cap message; older completed tools/nodes are evicted first. Disconnected sessions expire after ten minutes. Context transfers retain at most 120 records/session with 6,000-character payloads. Agents retain 20 skill records with 2,000-character content excerpts; session catalogs retain 60 definitions each. These limits bound display state rather than constrain Copilot's actual work.
 
 ## Designing orchestration
 
@@ -53,3 +53,7 @@ Release ZIPs contain compiled assets and require only Node.js at runtime. Source
 ## Development dependency note
 
 The ZIP's production collector uses only Node built-ins; build tools are not loaded. Vite is a development dependency. The current upstream picomatch advisory GHSA-fc5q-39xc-vjpf has no patched release as of this build and appears in a full development audit through Vite's glob tooling. Spy does not accept user-supplied glob patterns or load that tooling in production. Packaging's fflate dependency was updated to its available fixed patch. Use the release ZIP for the minimal runtime; development audit status is distinct from production runtime coverage.
+
+## Custom observation events
+
+`spy_observe` accepts `viewer.context_handoff` (`source`, `target`, optional `payload`, `summary`, `mode`), `viewer.context_mode` (`agentId`, `mode`), `viewer.agent_state` (`agentId`, `state`, `reason`) and `viewer.structure_change` (`message`). These are observer annotations, not execution controls. The same packets can be posted to the local event endpoint. Mode is `shared`, `isolated` or `unknown`. State is `running`, `idle`, `waiting`, `blocked`, `completed`, `failed`, `cancelled` or `unknown`. Native tool/skill payloads have runtime provenance; annotations cannot promote themselves to runtime evidence.

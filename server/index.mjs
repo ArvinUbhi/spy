@@ -1,3 +1,4 @@
+import {VERSION,FEATURES} from './version.mjs';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 const portFlag = process.argv.indexOf('--port');
@@ -30,7 +31,7 @@ export async function createViewer({ port = defaultPort, production = process.ar
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         res.spySessionId=url.searchParams.get('session'); peers.add(res); snapshot(res); res.write(`event: metrics\ndata: ${JSON.stringify(metrics.get())}\n\n`); req.on('close', () => peers.delete(res)); return;
       }
-      if (url.pathname === '/api/health') return json(200, { ok: true, service:'spy',protocol:1,pid:process.pid,sessions:store.sessions.size,storage:'memory' });
+      if (url.pathname === '/api/health') return json(200, { ok: true, service:'spy',protocol:1,version:VERSION,features:FEATURES,pid:process.pid,sessions:store.sessions.size,storage:'memory' });
       if (url.pathname === '/api/metrics' && req.method==='GET') return json(200,metrics.get());
       if (req.method !== 'POST') return json(405, { error: 'POST required' });
       if (req.headers['x-agent-viewer'] !== '1') return json(403, { error: 'Bridge header required' });

@@ -34,3 +34,13 @@ test('collector starts through a symlinked installation path (macOS /var alias)'
     pid=result.pid;assert.ok(pid>0);assert.equal(result.started,true);
   }finally{if(pid)process.kill(pid);await rm(dir,{recursive:true,force:true});}
 });
+test('launcher replaces a verified legacy Spy collector without touching unrelated services',async()=>{
+ const dir=await mkdtemp(resolve(tmpdir(),'spy-upgrade-')),port=await freePort(),endpoint=`http://127.0.0.1:${port}`;let pid;
+ const legacy=spawn(process.execPath,['--input-type=module','-e',`import http from 'node:http';http.createServer((q,r)=>{r.setHeader('Content-Type','application/json');r.end(JSON.stringify({service:'spy',protocol:1,pid:process.pid}));}).listen(${port},'127.0.0.1',()=>console.log('ready'));`],{stdio:['ignore','pipe','pipe']});
+ try{
+  await new Promise((yes,no)=>{const t=setTimeout(()=>no(Error('legacy startup timeout')),5000);legacy.on('error',no);legacy.stdout.once('data',()=>{clearTimeout(t);yes();});});
+  await assert.rejects(ensureCollector({endpoint,requiredFeatures:['skill-events']}),/older/);
+  assert.equal((await(await fetch(endpoint+'/api/health')).json()).pid,legacy.pid);
+  const next=await ensureCollector({endpoint,script:resolve('server/index.mjs'),lockDirectory:dir,requiredFeatures:['skill-events','context-transfers'],allowReplace:true});pid=next.pid;assert.notEqual(pid,legacy.pid);assert.ok(next.features.includes('context-transfers'));
+ }finally{if(pid)process.kill(pid);if(legacy.exitCode===null)legacy.kill();await rm(dir,{recursive:true,force:true});}
+});
