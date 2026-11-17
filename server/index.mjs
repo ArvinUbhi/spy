@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 const portFlag = process.argv.indexOf('--port');
 const defaultPort = Number(process.env.PORT || (portFlag >= 0 ? process.argv[portFlag + 1] : 4317));
 import { readFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { resolve, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMetrics } from './metrics.mjs';
@@ -65,7 +66,7 @@ export async function createViewer({ port = defaultPort, production = process.ar
   if(process.argv.includes('--auto')) { const bootAt=Date.now();autoTimer=setInterval(()=>{const lastSeen=Math.max(bootAt,...[...store.sessions.values()].map(s=>s.lastSeen));if(!peers.size && Date.now()-lastSeen>120000)void close();},10000); }
   return {server,store,close};
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   const viewer = await createViewer();
   console.log(`\n  SPY\n  http://127.0.0.1:${viewer.server.address().port}\n  In-memory only. Click “Run demo” or install the bridge: npm run connect\n`);
   if (process.argv.includes('--open') && !process.argv.includes('--no-open')) {

@@ -49,3 +49,7 @@ Collector CPU/RSS measures that Node process; bridge samples measure each extens
 ## Distribution
 
 Release ZIPs contain compiled assets and require only Node.js at runtime. Source builds use Vite. CI checks unit/integration/startup tests on Node 22/24 and Windows/macOS/Linux, browser behavior in Chromium, benchmark gates and clean ZIP startup. Version-tag workflows attach the ZIP and reports to GitHub Releases.
+
+## Development dependency note
+
+The ZIP's production collector uses only Node built-ins; build tools are not loaded. Vite is a development dependency. The current upstream picomatch advisory GHSA-fc5q-39xc-vjpf has no patched release as of this build and appears in a full development audit through Vite's glob tooling. Spy does not accept user-supplied glob patterns or load that tooling in production. Packaging's fflate dependency was updated to its available fixed patch. Use the release ZIP for the minimal runtime; development audit status is distinct from production runtime coverage.

@@ -22,12 +22,12 @@
     "@xyflow/react": "^12.10.0",
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "vite": "^7.2.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "vite": "^7.2.0"
   },
   "description": "Spy: a live React graph viewer for GitHub Copilot CLI agents"
 }

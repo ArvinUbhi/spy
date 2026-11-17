@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, access } from 'node:fs/promises';
+import { mkdtemp, rm, access, cp, symlink, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { ensureCollector } from '../bridge/collector.mjs';
@@ -24,3 +24,13 @@ test('never sends telemetry to a foreign service occupying the port',async()=>{
   try{await assert.rejects(ensureCollector({endpoint:`http://127.0.0.1:${server.address().port}`,spawnProcess:()=>{launched=true;}}),/another service/);assert.equal(launched,false);}finally{await new Promise(r=>server.close(r));}
 });
 test('rejects remote collector URLs',async()=>{await assert.rejects(ensureCollector({endpoint:'http://example.com:4317'}),/local HTTP/);});
+
+test('collector starts through a symlinked installation path (macOS /var alias)',async()=>{
+  const dir=await mkdtemp(resolve(tmpdir(),'spy-symlink-'));let pid;
+  try{
+    const real=resolve(dir,'real');await mkdir(real);await cp(resolve('server'),resolve(real,'server'),{recursive:true});
+    const alias=resolve(dir,'alias');await symlink(real,alias,process.platform==='win32'?'junction':'dir');
+    const port=await freePort();const result=await ensureCollector({endpoint:`http://127.0.0.1:${port}`,script:resolve(alias,'server/index.mjs'),lockDirectory:resolve(dir,'locks')});
+    pid=result.pid;assert.ok(pid>0);assert.equal(result.started,true);
+  }finally{if(pid)process.kill(pid);await rm(dir,{recursive:true,force:true});}
+});
