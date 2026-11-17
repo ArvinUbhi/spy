@@ -5,7 +5,7 @@ import { zipSync, unzipSync } from 'fflate';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { version } = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const files = {};
-const excluded = new Set(['node_modules', '.git', 'release', '.codex']);
+const excluded = new Set(['node_modules', '.git', 'release', '.codex', 'reports']);
 async function walk(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (excluded.has(entry.name) || entry.name.endsWith('.log')) continue;

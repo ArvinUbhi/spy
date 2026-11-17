@@ -1,5 +1,9 @@
 # Spy
 
+[![Check Spy](https://github.com/ArvinUbhi/spy/actions/workflows/checks.yml/badge.svg)](https://github.com/ArvinUbhi/spy/actions/workflows/checks.yml)
+
+[Download the latest ZIP](https://github.com/ArvinUbhi/spy/releases/latest) · [Tests and verification](docs/TESTING.md) · [Measured benchmarks](docs/BENCHMARKS.md)
+
 A local, live React graph viewer for GitHub Copilot CLI sessions. Watch agents appear, delegate, run tools and finish. Click an agent to inspect its reported model, current task, streamed response, tool arguments/results and running time.
 
 **Live view comes first.** No SQLite, database, session files, browser storage or cloud backend for Spy. Current state lives in RAM and disappears when the collector stops. Copilot CLI independently manages its own session persistence.
@@ -57,6 +61,7 @@ Dragging rearranges the display. This first version does not rewrite agent organ
 npm ci
 npm start
 npm test
+npm run benchmark
 npm run build
 npm run package
 ```
@@ -95,11 +100,11 @@ An orchestrator can POST events to `/api/events` with `Content-Type: application
 
 Use actual agent identifiers and unique event IDs to deduplicate retries. `viewer.structure_change` with `data.message` adds a visible change notice. The bridge automatically forwards native session events. Batches accept up to 100 events/512 KB.
 
-Memory caps: 40 sessions, 160 agents/session, 60 activity entries/agent and 120 retained tools/agent (active calls may temporarily exceed the tool cap). Disconnected sessions expire after ten minutes without heartbeats. Collector restart clears everything; heartbeats reconnect sessions, but preceding events cannot be reconstructed. No historical session scanning occurs. Bridge queues are bounded; a fresh CLI session gives the clearest graph after dropped/missed events.
+Memory caps: 40 sessions, 160 agents/session, 60 activity entries/agent and 120 retained tools/agent (additional active calls are omitted with a visibility-cap message). Disconnected sessions expire after ten minutes without heartbeats. Collector restart clears everything; heartbeats reconnect sessions, but preceding events cannot be reconstructed. No historical session scanning occurs. Bridge queues are bounded; a fresh CLI session gives the clearest graph after dropped/missed events.
 
 ## GitHub distribution
 
-The included CI checks Node 22/24 on Windows, macOS and Linux. Those remote checks run after pushing the repository; they have not yet been executed here.
+The included CI checks Node 22/24 on Windows, macOS and Linux. The initial matrix passed. The latest expanded suite status, JUnit results, browser reports and benchmark artifacts are published by Actions; see the badge and testing guide above.
 
 Pushing a version tag (`v0.1.0`) triggers `.github/workflows/release.yml`: test, build, package and attach the ZIP to a GitHub Release using the repository's Actions token. The check workflow also uploads a ZIP artifact. Release links become available after the workflow succeeds.
 

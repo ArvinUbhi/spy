@@ -72,3 +72,27 @@ test('native lifecycle envelope IDs correlate child events and configured model'
   assert.equal(s.agents[1].model, 'resolved-model'); assert.equal(s.agents[1].activity, 'Reviewing');
   assert.equal(s.edges[0].source, 'root');
 });
+test('native shell output streams into its owning tool', () => {
+  const store = new Store();
+  store.ingest(packet('tool.execution_start', { toolCallId: 'shell', toolName: 'shell' }, { agentId: 'worker' }), at);
+  store.ingest(packet('tool.shell_output', { toolCallId: 'shell', text: '3 tests passed\n' }), at);
+  assert.match(store.snapshot(at)[0].agents.find(a=>a.id==='worker').tools.shell.result, /3 tests passed/);
+});
+test('session, agent, output and active-tool buffers stay bounded under churn', () => {
+  const store = new Store();
+  for (let i=0;i<50;i++) store.ingest({ ...packet('viewer.heartbeat'), sessionId:'session-'+i }, at);
+  assert.equal(store.sessions.size,40);
+  for (let i=0;i<200;i++) store.ingest(packet('subagent.started',{ toolCallId:'agent-'+i }),at);
+  assert.equal(store.snapshot(at).find(s=>s.id==='s').agents.length,160);
+  for (let i=0;i<150;i++) store.ingest(packet('tool.execution_start',{ toolCallId:'tool-'+i,toolName:'shell' }),at);
+  const root=store.snapshot(at).find(s=>s.id==='s').agents.find(a=>a.id==='root');
+  assert.equal(Object.keys(root.tools).length,120); assert.equal(root.droppedTools,30);
+  for(let i=0;i<20;i++) store.ingest(packet('assistant.message_delta',{deltaContent:'x'.repeat(1000)}),at);
+  assert.equal(root.output.length,10000);
+});
+test('rejects nonfinite metrics and malformed IDs before changing state', () => {
+  const store = new Store();
+  assert.throws(()=>store.ingest(packet('assistant.usage',{inputTokens:'100'}),at));
+  assert.throws(()=>store.ingest(packet('tool.execution_start',{toolCallId:{bad:1}}),at));
+  assert.equal(store.sessions.size,0);
+});

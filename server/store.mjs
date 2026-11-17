@@ -7,7 +7,9 @@ export class Store {
   ingest(packet, now = Date.now()) {
     if (!packet || typeof packet.sessionId !== 'string' || packet.sessionId.length > 200) throw new Error('sessionId required');
     const event = packet.event;
-    if (!event || typeof event.type !== 'string' || !event.data || typeof event.data !== 'object') throw new Error('event.type and event.data required');
+    if (!event || typeof event.type !== 'string' || event.type.length > 100 || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) throw new Error('event.type and event.data required');
+    for (const id of [event.agentId, event.data.toolCallId, event.data.agentId, event.data.source, event.data.target]) if (id !== undefined && (typeof id !== 'string' || id.length > 200)) throw new Error('Invalid instance identifier');
+    for (const key of ['inputTokens', 'outputTokens', 'totalTokens', 'duration', 'durationMs']) if (event.data[key] !== undefined && (!Number.isFinite(event.data[key]) || event.data[key] < 0)) throw new Error('Invalid metric: ' + key);
     let s = this.sessions.get(packet.sessionId);
     if (!s) {
       if (this.sessions.size >= MAX_SESSIONS) this.sessions.delete(this.sessions.keys().next().value);
@@ -85,6 +87,11 @@ export class Store {
     if (type === 'assistant.usage') { if (d.model) a.model = clip(d.model); a.tokens += (d.inputTokens || 0) + (d.outputTokens || 0); a.modelMs += d.duration || 0; }
     if (type === 'session.model_change' && d.newModel) root.model = clip(d.newModel);
     if (type === 'tool.execution_start') {
+      if (Object.keys(a.tools).length >= 120 && !a.tools[d.toolCallId]) {
+        const old = Object.values(a.tools).find(t => t.status !== 'running');
+        if (old) delete a.tools[old.id];
+        else { a.droppedTools = (a.droppedTools || 0) + 1; a.activity = 'Tool visibility cap reached (120 active calls)'; return s; }
+      }
       a.tools[d.toolCallId] = { id: d.toolCallId, name: clip(d.toolName || 'Tool'), startedAt: at, status: 'running', args: clip(d.arguments) };
       a.activity = 'Running ' + (d.toolName || 'tool');
       if (Object.keys(a.tools).length > 120) { const old = Object.values(a.tools).find(t => t.status !== 'running'); if (old) delete a.tools[old.id]; }

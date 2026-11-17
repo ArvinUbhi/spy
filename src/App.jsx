@@ -1,3 +1,4 @@
+import { arrange } from './graph.mjs';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, Handle, Position, MarkerType, ReactFlowProvider, useReactFlow, useNodesState } from '@xyflow/react';
 import { Activity, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Code2, Command, Copy, GitBranch, Layers3, Maximize2, Network, Play, Radio, RotateCcw, Search, Settings2, Square, Terminal, Workflow, X, Zap } from 'lucide-react';
@@ -33,19 +34,7 @@ function AgentNode({ data, selected }) {
   </div>;
 }
 const nodeTypes = { agent: AgentNode };
-function arrange(session) {
-  const agents = session.agents;
-  const levels = Object.fromEntries(agents.map(a => [a.id, a.id === 'root' ? 0 : 1]));
-  const handoffTargets = new Set(session.edges.filter(e => e.kind !== 'delegation' && e.kind !== 'feedback').map(e => e.target));
-  const edges = session.edges.filter(e => e.kind !== 'feedback' && !(e.kind === 'delegation' && handoffTargets.has(e.target)));
-  // Feedback is excluded from layout constraints. Cyclic unknown inputs are bounded.
-  for (let i = 0; i < Math.min(agents.length, 7); i++) for (const e of edges) if (e.target !== 'root') levels[e.target] = Math.min(6, Math.max(levels[e.target] || 1, (levels[e.source] || 0) + 1));
-  const groups = {};
-  for (const a of agents) (groups[levels[a.id]] ||= []).push(a.id);
-  const positions = {};
-  for (const [level, ids] of Object.entries(groups)) ids.forEach((id, i) => { positions[id] = { x: 440 + (i - (ids.length - 1) / 2) * 320, y: 30 + Number(level) * 230 }; });
-  return positions;
-}
+
 function Canvas({ session, now, selected, onSelect, slowAfter, follow, setFollow }) {
   const flow = useReactFlow();
   const [positions, setPositions] = useState({});

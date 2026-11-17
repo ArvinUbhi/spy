@@ -1,0 +1,73 @@
+{
+  "measuredAt": "2026-11-17T20:07:21.089Z",
+  "environment": {
+    "node": "v24.22.1",
+    "os": "linux",
+    "arch": "x64",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "logicalCpus": 9
+  },
+  "scope": "Synthetic collector and localhost HTTP-to-SSE overhead; excludes browser paint, actual Copilot delivery, model inference and workflow quality.",
+  "thresholds": {
+    "minimumEventsPerSecond": 2000,
+    "maximumSnapshotP95Ms": 250,
+    "maximumRetainedHeapMiB": 256,
+    "maximumGraphLayoutP95Ms": 25,
+    "maximumDeliveryP95Ms": 1000
+  },
+  "workloads": [
+    {
+      "name": "Single active session",
+      "sessions": 1,
+      "workersPerSession": 8,
+      "events": 20000,
+      "eventsPerSecond": 123730,
+      "ingestMs": 161.642,
+      "batch100P95Ms": 1.384,
+      "snapshotP50Ms": 0.596,
+      "snapshotP95Ms": 1.12,
+      "snapshotBytes": 216146,
+      "graphLayoutP95Ms": 0.032,
+      "retainedHeapMiB": 0.643,
+      "passed": true
+    },
+    {
+      "name": "Ten concurrent sessions",
+      "sessions": 10,
+      "workersPerSession": 16,
+      "events": 40000,
+      "eventsPerSecond": 293462,
+      "ingestMs": 136.304,
+      "batch100P95Ms": 0.764,
+      "snapshotP50Ms": 11.259,
+      "snapshotP95Ms": 16.903,
+      "snapshotBytes": 2651371,
+      "graphLayoutP95Ms": 0.047,
+      "retainedHeapMiB": 5.742,
+      "passed": true
+    },
+    {
+      "name": "Forty concurrent sessions",
+      "sessions": 40,
+      "workersPerSession": 12,
+      "events": 60000,
+      "eventsPerSecond": 378122,
+      "ingestMs": 158.679,
+      "batch100P95Ms": 0.405,
+      "snapshotP50Ms": 26.704,
+      "snapshotP95Ms": 30.887,
+      "snapshotBytes": 5256691,
+      "graphLayoutP95Ms": 0.104,
+      "retainedHeapMiB": 11.016,
+      "passed": true
+    }
+  ],
+  "delivery": {
+    "samples": 20,
+    "p50Ms": 100.463,
+    "p95Ms": 106.034,
+    "p99Ms": 106.034,
+    "passed": true
+  },
+  "passed": true
+}

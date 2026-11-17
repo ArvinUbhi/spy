@@ -10,11 +10,13 @@
     "start": "node server/index.mjs",
     "dev": "node server/index.mjs",
     "build": "vite build",
-    "test": "node --test",
+    "test": "node scripts/run-tests.mjs",
     "connect": "node scripts/install-bridge.mjs",
     "disconnect": "node scripts/install-bridge.mjs --remove",
     "package": "node scripts/package.mjs",
-    "verify:zip": "node scripts/verify-zip.mjs"
+    "verify:zip": "node scripts/verify-zip.mjs",
+    "benchmark": "node --expose-gc scripts/benchmark.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@xyflow/react": "^12.10.0",
@@ -24,6 +26,7 @@
     "vite": "^7.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "fflate": "^0.8.2"
   },
   "description": "Spy: a live React graph viewer for GitHub Copilot CLI agents"
