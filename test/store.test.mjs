@@ -96,3 +96,16 @@ test('rejects nonfinite metrics and malformed IDs before changing state', () => 
   assert.throws(()=>store.ingest(packet('tool.execution_start',{toolCallId:{bad:1}}),at));
   assert.equal(store.sessions.size,0);
 });
+test('live view streams only selected details while retaining other session summaries',()=>{
+  const store=new Store();
+  store.ingest({...packet('assistant.message',{content:'private output one'}),sessionId:'one'},at);
+  store.ingest({...packet('assistant.message',{content:'private output two'}),sessionId:'two'},at);
+  const view=store.liveView('two',at);
+  assert.equal(view.selectedSessionId,'two');assert.equal(view.sessions[0].agents.length,0);assert.equal(view.sessions[0].runningCount,1);
+  assert.match(JSON.stringify(view),/private output two/);assert.doesNotMatch(JSON.stringify(view),/private output one/);
+});
+test('resource metrics are retained per bridge and hard caps do not leak aliases',()=>{
+  const store=new Store();store.ingest({...packet('viewer.heartbeat'),bridgeMetrics:{rssMiB:25,cpuPercent:.1}},at);
+  for(let i=0;i<1000;i++)store.ingest(packet('subagent.started',{toolCallId:'agent-'+i}),at);
+  assert.ok(Object.keys(store.sessions.get('s').aliases).length<=160);assert.equal(store.liveView('s',at).sessions[0].bridgeMetrics.rssMiB,25);
+});

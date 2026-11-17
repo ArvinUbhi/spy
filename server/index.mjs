@@ -5,15 +5,16 @@ const defaultPort = Number(process.env.PORT || (portFlag >= 0 ? process.argv[por
 import { readFile } from 'node:fs/promises';
 import { resolve, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createMetrics } from './metrics.mjs';
 import { Store } from './store.mjs';
 import { startDemo } from './demo.mjs';
 export async function createViewer({ port = defaultPort, production = process.argv.includes('--production'), demo = process.argv.includes('--demo') } = {}) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const store = new Store(), peers = new Set();
+  const store = new Store(), peers = new Set(), metrics=createMetrics(); metrics.sample();
   let dirty = false, stopDemo;
   const changed = () => { dirty = true; };
   const vite = production ? null : await (await import('vite')).createServer({ root, server: { middlewareMode: true, allowedHosts: true }, appType: 'spa' });
-  const snapshot = res => { if (!res.destroyed) { if (res.writableLength > 2_000_000) return res.destroy(); res.write(`data: ${JSON.stringify(store.snapshot())}\n\n`); } };
+  const snapshot = res => { if (!res.destroyed) { if (res.writableLength > 2_000_000) return res.destroy(); res.write(`data: ${JSON.stringify(store.liveView(res.spySessionId))}\n\n`); } };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const json = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
@@ -26,9 +27,10 @@ export async function createViewer({ port = defaultPort, production = process.ar
       if (origin) { try { if (new URL(origin).host !== req.headers.host) return json(403, { error: 'Cross-origin request rejected' }); } catch { return json(403, { error: 'Invalid origin' }); } }
       if (url.pathname === '/api/stream' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-        peers.add(res); snapshot(res); req.on('close', () => peers.delete(res)); return;
+        res.spySessionId=url.searchParams.get('session'); peers.add(res); snapshot(res); res.write(`event: metrics\ndata: ${JSON.stringify(metrics.get())}\n\n`); req.on('close', () => peers.delete(res)); return;
       }
-      if (url.pathname === '/api/health') return json(200, { ok: true, sessions: store.sessions.size, storage: 'memory' });
+      if (url.pathname === '/api/health') return json(200, { ok: true, service:'spy',protocol:1,pid:process.pid,sessions:store.sessions.size,storage:'memory' });
+      if (url.pathname === '/api/metrics' && req.method==='GET') return json(200,metrics.get());
       if (req.method !== 'POST') return json(405, { error: 'POST required' });
       if (req.headers['x-agent-viewer'] !== '1') return json(403, { error: 'Bridge header required' });
       if (url.pathname === '/api/demo/start') { if (!stopDemo) stopDemo = startDemo(store, changed); return json(200, { ok: true }); }
@@ -40,6 +42,7 @@ export async function createViewer({ port = defaultPort, production = process.ar
         const packets = JSON.parse(body), batch = Array.isArray(packets) ? packets : [packets];
         if (batch.length > 100) return json(400, { error: 'Maximum batch size is 100' });
         for (const packet of batch) store.ingest(packet);
+        metrics.accepted(batch.length);
         changed(); json(200, { accepted: batch.length });
       } catch (error) { json(400, { error: error.message }); }
       return;
@@ -53,10 +56,14 @@ export async function createViewer({ port = defaultPort, production = process.ar
     } catch { res.setHeader('Content-Type', 'text/html'); res.end(await readFile(resolve(root, 'dist/index.html'))); }
   });
   const timer = setInterval(() => { if (dirty) { dirty = false; for (const peer of peers) snapshot(peer); } }, 100);
+  const resourceTimer=setInterval(()=>{const value=metrics.sample();for(const peer of peers)if(!peer.destroyed && peer.writableLength<2_000_000)peer.write(`event: metrics\ndata: ${JSON.stringify(value)}\n\n`);},1000);
+  let autoTimer;
   const keepalive = setInterval(() => { for (const peer of peers) snapshot(peer); }, 10_000);
   if (demo) stopDemo = startDemo(store, changed);
   await new Promise((yes, no) => { server.once('error', no); server.listen(port, '127.0.0.1', yes); });
-  return { server, store, close: async () => { clearInterval(timer); clearInterval(keepalive); stopDemo?.(); for (const peer of peers) peer.end(); await vite?.close(); await new Promise(r => server.close(r)); } };
+  const close=async () => { clearInterval(timer); clearInterval(keepalive);clearInterval(resourceTimer);clearInterval(autoTimer); stopDemo?.(); for (const peer of peers) peer.end(); await vite?.close(); await new Promise(r => server.close(r)); };
+  if(process.argv.includes('--auto')) { const bootAt=Date.now();autoTimer=setInterval(()=>{const lastSeen=Math.max(bootAt,...[...store.sessions.values()].map(s=>s.lastSeen));if(!peers.size && Date.now()-lastSeen>120000)void close();},10000); }
+  return {server,store,close};
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const viewer = await createViewer();

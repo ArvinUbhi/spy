@@ -17,6 +17,7 @@ export class Store {
       this.sessions.set(s.id, s);
     }
     s.lastSeen = now;
+    if(packet.bridgeMetrics && ['rssMiB','cpuPercent'].every(k=>Number.isFinite(packet.bridgeMetrics[k]) && packet.bridgeMetrics[k]>=0)) s.bridgeMetrics={rssMiB:packet.bridgeMetrics.rssMiB,cpuPercent:packet.bridgeMetrics.cpuPercent};
     if (event.id && s.seen.has(event.id)) return s;
     if (event.id) { s.seen.add(event.id); if (s.seen.size > 4000) s.seen.delete(s.seen.values().next().value); }
     const d = event.data, type = event.type;
@@ -48,10 +49,10 @@ export class Store {
       id = s.aliases[d.toolCallId] || childInstance || d.toolCallId;
       // Correlate lifecycle IDs with their spawning tool. An envelope ID that
       // matches the known caller remains the parent; distinct IDs identify the child.
-      s.aliases[d.toolCallId] = id;
-      if (childInstance) s.aliases[childInstance] = id;
       const a = agent(id, d.agentDisplayName || d.agentName);
       if (!a) return s;
+      s.aliases[d.toolCallId] = id;
+      if (childInstance) s.aliases[childInstance] = id;
       if (d.agentName) a.role = clip(d.agentName);
       if (d.agentDisplayName) a.name = clip(d.agentDisplayName);
       if (d.agentDescription) a.task = clip(d.agentDescription);
@@ -128,4 +129,13 @@ export class Store {
     for (const [id, s] of this.sessions) if (now - s.lastSeen > 10 * 60_000) this.sessions.delete(id);
     return [...this.sessions.values()].map(({ aliases, calls, seen, ...s }) => ({ ...s, status: now - s.lastSeen > 35_000 ? 'disconnected' : s.status, agents: Object.values(s.agents) }));
   }
+  liveView(selectedId,now=Date.now()) {
+    const all=this.snapshot(now);
+    const selected=all.find(s=>s.id===selectedId) || all.find(s=>s.source==='live' && s.status!=='disconnected') || all[0];
+    return {selectedSessionId:selected?.id || null,sessions:all.map(s=>{
+      const summary={id:s.id,name:s.name,cwd:s.cwd,source:s.source,status:s.status,startedAt:s.startedAt,lastSeen:s.lastSeen,runningCount:s.agents.filter(a=>a.status==='running').length,nodeCount:s.agents.length,bridgeMetrics:s.bridgeMetrics};
+      return s.id===selected?.id?{...s,...summary}:{...summary,agents:[],edges:[],notices:[]};
+    })};
+  }
+
 }

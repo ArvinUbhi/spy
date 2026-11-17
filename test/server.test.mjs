@@ -19,3 +19,7 @@ test('collector accepts bridge events, streams them, and rejects foreign browser
     assert.equal((await fetch(base + '/api/events', { method: 'POST', headers: { 'X-Agent-Viewer': '1' }, body: '{broken' })).status, 400);
   } finally { abort.abort(); await viewer.close(); }
 });
+test('health identifies Spy and resource endpoint reports process CPU/RSS',async()=>{
+  const viewer=await createViewer({port:0,production:true,demo:false});const base=`http://127.0.0.1:${viewer.server.address().port}`;
+  try{const health=await(await fetch(base+'/api/health')).json();assert.equal(health.service,'spy');assert.equal(health.protocol,1);const metrics=await(await fetch(base+'/api/metrics')).json();assert.ok(metrics.rssMiB>0);assert.ok(metrics.cpuPercent>=0);assert.equal(metrics.pid,process.pid);}finally{await viewer.close();}
+});
