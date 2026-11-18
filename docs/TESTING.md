@@ -49,3 +49,7 @@ See [measured benchmarks](BENCHMARKS.md) and [machine-readable results](benchmar
 6. Use explicit workflow metadata to exercise feedback edges. Confirm visual rearrangement is separate from runtime control.
 
 An automated synthetic pass cannot replace this acceptance check against your installed CLI version.
+
+## Spy 0.3 diagnostics
+
+53 unit/integration tests cover timing overlap, bounded loops, usage attribution, design validation/drift, sequence gaps and the actual extension module against a synthetic SDK transport. Browser tests cover diagnostic tabs, critical-path highlighting and design import/export. A resource test reports Chromium processes, collector and five bridge processes in `reports/resources.json`; it is not real Copilot acceptance. `npm run doctor` checks prerequisites.

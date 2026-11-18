@@ -29,4 +29,4 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --title "Spy $RELEASE_TAG" --generate-notes
           fi
-          gh release upload "$RELEASE_TAG" release/*.zip reports/BENCHMARKS.md reports/benchmark.json reports/junit.xml reports/browser-junit.xml --clobber
+          gh release upload "$RELEASE_TAG" release/*.zip reports/BENCHMARKS.md reports/benchmark.json reports/junit.xml reports/browser-junit.xml reports/resources.json --clobber

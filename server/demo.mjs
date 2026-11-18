@@ -11,6 +11,7 @@ export function startDemo(store, changed) {
   start('planner', 'Planner', 'Demo · reasoning model', 'Break down the authentication change');
   emit('skill.invoked',{name:'verification-loop',path:'.github/skills/verification-loop/SKILL.md',description:'Verify changes against explicit acceptance criteria',content:'Define acceptance criteria, delegate implementation, run tests and independent review, and rework failed checks.'},'planner');
   emit('assistant.intent', { intent: 'Mapping session boundaries and verification criteria' }, 'planner');
+  emit('viewer.iteration',{loopId:'auth-verification',iteration:1,outcome:'running'},'root');
   const timer = setInterval(() => {
     phase++;
     emit('viewer.heartbeat');
@@ -38,6 +39,9 @@ export function startDemo(store, changed) {
     }
     if (phase === 8) emit('assistant.message', { content: 'Refresh race detected: two concurrent requests may reuse an expired token. Add a single-flight guard and rerun verification.' }, 'reviewer');
     if (phase === 10) {
+      emit('assistant.usage',{model:'Demo · fast model',inputTokens:2400,outputTokens:340,duration:1800},'tester');
+      emit('assistant.usage',{model:'Demo · reasoning model',inputTokens:3600,outputTokens:650,duration:3200},'reviewer');
+      emit('viewer.iteration',{loopId:'auth-verification',iteration:iteration+1,outcome:'failed',progressKey:'concurrent-refresh-single-flight'},'root');
       emit('subagent.completed', { toolCallId: 'reviewer' });
       emit('tool.execution_complete', { toolCallId: 'tests-' + iteration, success: false, error: '1 failed: concurrent refresh should issue one token request' }, 'tester');
       emit('viewer.agent_state',{state:'blocked',reason:'Verification failed; implementation needs rework'},'root');
@@ -46,7 +50,7 @@ export function startDemo(store, changed) {
       emit('viewer.structure_change', { message: 'Verification returned to Implementer. Feedback loop is now active.' });
     }
     if (phase === 12) {
-      iteration++; phase = 2;emit('viewer.agent_state',{state:'running',reason:'Starting next verification iteration'},'root');
+      iteration++; phase = 2;emit('viewer.iteration',{loopId:'auth-verification',iteration:iteration+1,outcome:'running'},'root');emit('viewer.agent_state',{state:'running',reason:'Starting next verification iteration'},'root');
       start('builder', 'Implementer', 'Demo · coding model', 'Fix concurrent refresh, iteration ' + (iteration + 1));
       emit('assistant.intent', { intent: 'Applying reviewer findings · iteration ' + (iteration + 1) }, 'builder');
     }

@@ -23,3 +23,5 @@ Spy keeps current state in memory only. The collector exits after two idle minut
 Development: `npm ci`, `npm start`. Checks: `npm test`, `npm run benchmark`. Package: `npm run build`, `npm run package`, `npm run verify:zip`.
 
 **Integration status:** automated collector/bridge/startup/browser tests use synthetic events. Real signed-in Copilot CLI validation is still required. Full-context sharing and custom feedback edges need explicit orchestration metadata; arranging the view does not rewrite a running workflow.
+
+Orchestration diagnostics: critical-path highlighting, parallel timing, loop health, context checks, per-model usage and an import/export design canvas. [How it works](docs/DIAGNOSTICS.md).

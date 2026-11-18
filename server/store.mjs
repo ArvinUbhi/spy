@@ -1,3 +1,4 @@
+import { transport, instrument } from './diagnostics.mjs';
 import { observe, recordContext, delegatedPrompt } from './observability.mjs';
 // Volatile current-session projection. No database, log file, or browser storage.
 const MAX_SESSIONS = 40, MAX_AGENTS = 160, MAX_EVENTS = 60;
@@ -10,26 +11,29 @@ export class Store {
     const event = packet.event;
     if (!event || typeof event.type !== 'string' || event.type.length > 100 || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) throw new Error('event.type and event.data required');
     for (const id of [event.agentId, event.data.toolCallId, event.data.agentId, event.data.source, event.data.target, event.data.requestId, event.data.ownerAgentId]) if (id !== undefined && (typeof id !== 'string' || id.length > 200)) throw new Error('Invalid instance identifier');
-    for (const key of ['inputTokens', 'outputTokens', 'totalTokens', 'duration', 'durationMs']) if (event.data[key] !== undefined && (!Number.isFinite(event.data[key]) || event.data[key] < 0)) throw new Error('Invalid metric: ' + key);
+    for (const key of ['inputTokens', 'outputTokens', 'totalTokens', 'duration', 'durationMs', 'cacheReadTokens', 'cacheWriteTokens']) if (event.data[key] !== undefined && (!Number.isFinite(event.data[key]) || event.data[key] < 0)) throw new Error('Invalid metric: ' + key);
     let s = this.sessions.get(packet.sessionId);
     if (!s) {
       if (this.sessions.size >= MAX_SESSIONS) this.sessions.delete(this.sessions.keys().next().value);
       s = { id: packet.sessionId, name: clip(packet.name || 'Copilot session'), cwd: clip(packet.cwd || ''), source: packet.source === 'demo' ? 'demo' : 'live', startedAt: now, lastSeen: now, status: 'connected', agents: Object.create(null), edges: [], aliases: Object.create(null), calls: Object.create(null), pendingRequests: Object.create(null), contexts: [], skillCatalog: [], agentCatalog: [], seen: new Set(), notices: [] };
       this.sessions.set(s.id, s);
     }
+    transport(s,packet);
     s.lastSeen = now;
     if(packet.bridgeMetrics && ['rssMiB','cpuPercent'].every(k=>Number.isFinite(packet.bridgeMetrics[k]) && packet.bridgeMetrics[k]>=0)) s.bridgeMetrics={rssMiB:packet.bridgeMetrics.rssMiB,cpuPercent:packet.bridgeMetrics.cpuPercent};
     if (event.id && s.seen.has(event.id)) return s;
     if (event.id) { s.seen.add(event.id); if (s.seen.size > 4000) s.seen.delete(s.seen.values().next().value); }
     const d = event.data, type = event.type;
     const parsed = Date.parse(event.timestamp);
-    const at = Number.isFinite(parsed) ? Math.min(parsed, now + 2000) : now;
+    const at = Math.max(s.lastEventAt||0,Number.isFinite(parsed)?Math.min(parsed,now):now);
+    s.lastEventAt=at;
     const agent = (id, name) => {
       if (!s.agents[id]) {
         if (Object.keys(s.agents).length >= MAX_AGENTS) {
           const old = Object.values(s.agents).find(a => terminal(a.status) && a.id !== 'root');
           if (!old) return null;
           delete s.agents[old.id];
+          s.timeline=(s.timeline||[]).filter(t=>t.agentId!==old.id);
           s.edges = s.edges.filter(e => e.source !== old.id && e.target !== old.id);
           s.contexts=s.contexts.filter(c=>c.source!==old.id&&c.target!==old.id);
           for(const [key,owner] of Object.entries(s.pendingRequests))if(owner===old.id)delete s.pendingRequests[key];
@@ -122,7 +126,8 @@ export class Store {
     if (type === 'viewer.edge' && d.source && d.target && d.source !== d.target) {
       agent(d.source); agent(d.target);
       const edgeId = `${d.source}:${d.target}:${d.kind || 'handoff'}`;
-      if (!s.edges.some(e => e.id === edgeId)) s.edges.push({ id: edgeId, source: d.source, target: d.target, kind: d.kind || 'handoff', label: clip(d.label || 'handoff'), inferred: false });
+      const previousEdge=s.edges.find(e=>e.id===edgeId);if(previousEdge){previousEdge.traversals=(previousEdge.traversals||1)+1;previousEdge.lastAt=at;}
+      if (!previousEdge) s.edges.push({ id: edgeId, source: d.source, target: d.target, kind: d.kind || 'handoff', traversals:1,firstAt:at,lastAt:at,label: clip(d.label || 'handoff'), inferred: false });
       s.edges = s.edges.slice(-400);
     }
     if(type==='viewer.context_handoff' && d.source && d.target){
@@ -131,6 +136,7 @@ export class Store {
         if(!s.edges.some(e=>e.id===edgeId))s.edges.push({id:edgeId,source,target,kind:'context',label:'Context handoff',inferred:false});s.edges=s.edges.slice(-400);}
     }
     observe(s,a,event,at);
+    instrument(s,a,event,at);
     if (type === 'viewer.structure_change') { s.notices.unshift({ at, message: clip(d.message) }); s.notices = s.notices.slice(0, 12); }
     if (!['assistant.message_delta', 'assistant.reasoning_delta', 'assistant.reasoning'].includes(type)) {
       a.events.unshift({ at, type, text: clip((type==='skill.invoked'?d.name:null) || d.intent || d.content || d.error || d.toolName || d.agentDisplayName || d.model || d.name || d.reason || type) });
@@ -147,7 +153,7 @@ export class Store {
     const selected=all.find(s=>s.id===selectedId) || all.find(s=>s.source==='live' && s.status!=='disconnected') || all[0];
     return {selectedSessionId:selected?.id || null,sessions:all.map(s=>{
       const summary={id:s.id,name:s.name,cwd:s.cwd,source:s.source,status:s.status,startedAt:s.startedAt,lastSeen:s.lastSeen,runningCount:s.status==='disconnected'?0:s.agents.filter(a=>a.status==='running').length,waitingCount:s.status==='disconnected'?0:s.agents.filter(a=>a.status==='waiting'||a.status==='blocked').length,nodeCount:s.agents.length,bridgeMetrics:s.bridgeMetrics};
-      return s.id===selected?.id?{...s,...summary}:{...summary,agents:[],edges:[],contexts:[],skillCatalog:[],agentCatalog:[],notices:[]};
+      return s.id===selected?.id?{...s,...summary}:{...summary,agents:[],edges:[],contexts:[],timeline:[],loops:[],skillCatalog:[],agentCatalog:[],notices:[]};
     })};
   }
 
