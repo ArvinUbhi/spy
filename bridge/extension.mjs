@@ -16,11 +16,11 @@ const session = await joinSession({tools:[{
 const sessionId = session.sessionId || `bridge-${randomUUID()}`;
 const queue = createBuffer();
 const bridgeId=randomUUID();let sequence=0;
-let busy = false, ready = false, connecting = false, lastConnect = 0;
+let busy = false, ready = false, connecting = false, lastConnect = 0, lastError = '';
 async function connect() {
   if (connecting || Date.now()-lastConnect<2000) return;
   connecting=true;lastConnect=Date.now();
-  try { await ensureCollector({endpoint,requiredFeatures:['skill-events','context-transfers','agent-states','diagnostics','retention','skill-authoring']}); ready=true; } catch(error) { ready=false;console.error('[Spy] '+error.message); } finally { connecting=false; }
+  try { await ensureCollector({endpoint,autoStart:false,requiredFeatures:['skill-events','context-transfers','agent-states','diagnostics','retention','skill-authoring']}); ready=true;lastError=''; } catch(error) { ready=false;if(lastError!==error.message){lastError=error.message;console.error('[Spy] '+error.message);} } finally { connecting=false; }
 }
 void connect();
 let previousCpu=process.cpuUsage(),previousAt=performance.now(),bridgeMetrics;

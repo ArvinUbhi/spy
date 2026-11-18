@@ -41,3 +41,9 @@ Spy is a local React dashboard for observing and designing GitHub Copilot CLI or
 - Fixed Windows JavaScript/CSS serving in extracted ZIPs.
 - Missing assets return a clear 404 instead of HTML; startup replaces collectors lacking the fix.
 - ZIP checks verify JavaScript contents and MIME types on Windows, macOS and Linux.
+
+## v0.4.2
+
+- Startup keeps the collector in the command window and stops the previous verified Spy PID on the selected port.
+- `stop.cmd` / `sh stop.sh` stops a hidden legacy collector before updates; unrelated Node/Copilot processes are left running.
+- Updated bridges reconnect to an open viewer without starting hidden collectors. Reload existing extensions after updating.

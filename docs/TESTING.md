@@ -56,4 +56,6 @@ An automated synthetic pass cannot replace this acceptance check against your in
 
 ## Spy 0.4 retention and skill exports
 
-66 unit/integration tests and 13 browser/resource tests cover byte-bounded queues, repeated alias IDs, idle/uninspected payload cleanup, SSE limits/teardown, hidden-tab release, manual clear, skill definitions/assignments and both skill/plugin ZIP layouts. `npm run test:memory` exercises 58,752 synthetic events across 12 cleanup rounds and publishes `reports/memory-soak.json`. This tests retention regressions, not every possible leak or real signed-in Copilot execution.
+72 unit/integration tests and 13 browser/resource tests cover byte-bounded queues, repeated alias IDs, idle/uninspected payload cleanup, SSE limits/teardown, hidden-tab release, manual clear, skill definitions/assignments and both skill/plugin ZIP layouts. `npm run test:memory` exercises 58,752 synthetic events across 12 cleanup rounds and publishes `reports/memory-soak.json`. This tests retention regressions, not every possible leak or real signed-in Copilot execution.
+
+Lifecycle checks exercise a live bridge across manual viewer shutdown/restart, refuse unrelated processes, and verify extracted-ZIP foreground PID ownership, replacement, stop and folder cleanup across the OS/Node matrix.

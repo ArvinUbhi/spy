@@ -21,3 +21,5 @@ Native session shutdown also stops the bridge’s timers and subscriptions, clea
 Cleanup does not depend on a browser being connected. **Clear details** releases the selected session's old payloads immediately without stopping Copilot. The viewer labels cleared, incomplete, stale and visibility-limited data. Cleared content is not recoverable from Spy; new live events resume normally.
 
 `npm run test:memory` runs repeated synthetic churn and cleanup under forced garbage collection, verifies state budgets and checks settled heap growth. Unit/browser tests cover expiry, bounded aliases/queues, stream teardown and manual clearing. Passing these checks is evidence against tested retention regressions, not proof that every possible leak is absent.
+
+The launcher owns the foreground collector directly; it does not detach a server process. Ctrl+C closes the server and releases retained state; closing its command window terminates that process. Start/stop scripts identify a prior collector through loopback health and wait for its PID to exit. Updated bridges never auto-start hidden collectors.

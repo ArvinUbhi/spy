@@ -10,3 +10,17 @@ test('actual extension joins, forwards catalogs/events/metadata and reports proc
   child.send({event:{type:'session.shutdown',data:{}}});await Promise.race([exit,new Promise((_,no)=>setTimeout(()=>no(Error('Bridge failed to exit after session shutdown')),5000).unref())]);
  }finally{child.kill();await exit;await viewer.close();}
 });
+test('an attached bridge stays stopped with the viewer and reconnects after a manual restart',async()=>{
+ let viewer=await createViewer({port:0,production:true});const port=viewer.server.address().port,endpoint=`http://127.0.0.1:${port}`;
+ const {child,exit}=await startBridge(endpoint,'manual-restart');
+ try{
+  child.send({event:{id:'before-stop',type:'assistant.intent',data:{intent:'Before stop'}}});
+  const attached=Date.now()+5000;while(!viewer.store.sessions.size&&Date.now()<attached)await new Promise(r=>setTimeout(r,50));
+  assert.equal(viewer.store.sessions.size,1);await viewer.close();
+  await new Promise(r=>setTimeout(r,2500));await assert.rejects(fetch(endpoint+'/api/health'));
+  viewer=await createViewer({port,production:true});
+  child.send({event:{id:'after-restart',type:'assistant.intent',data:{intent:'After restart'}}});
+  const deadline=Date.now()+6000;while(!viewer.store.sessions.size&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
+  assert.equal(viewer.store.sessions.size,1);
+ }finally{child.kill();await exit;await viewer.close();}
+});

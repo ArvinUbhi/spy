@@ -12,9 +12,9 @@ A live React graph for your **GitHub Copilot CLI** agents. See delegations, skil
 2. Windows: double-click **`start.cmd`**. macOS/Linux: **`sh start.sh`**.
 3. Start new sessions as usual with **`copilot --experimental`**.
 
-Setup installs the session bridge once. New sessions automatically share one background collector, starting it if needed. Open **http://127.0.0.1:4317** whenever you want the view. Try **Run demo** without a CLI session.
+Keep the command window open while using Spy. Startup stops the previous Spy collector on its port; all Copilot sessions share the new viewer. Open **http://127.0.0.1:4317** whenever you want the view. Try **Run demo** without a CLI session.
 
-Spy keeps current state in memory only. The collector exits after two idle minutes when no browser is connected. Existing sessions need the extension loaded once; they cannot be discovered retrospectively.
+Spy keeps current state in memory only. Press **Ctrl+C**, close the command window, or run **`stop.cmd`** / **`sh stop.sh`** to stop it. Run the new launcher to update; reload existing Copilot extensions after upgrading. Existing sessions need the extension loaded once; they cannot be discovered retrospectively.
 
 ## More
 

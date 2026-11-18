@@ -4,7 +4,7 @@ import { open, stat, unlink, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const delay = ms => new Promise(r=>setTimeout(r,ms));
-export async function ensureCollector({ endpoint='http://127.0.0.1:4317', script=resolve(dirname(fileURLToPath(import.meta.url)),'runtime/server/index.mjs'), lockDirectory=resolve(dirname(script),'..'), timeoutMs=8000, spawnProcess=spawn,requiredFeatures=[],allowReplace=false }={}) {
+export async function ensureCollector({ endpoint='http://127.0.0.1:4317', script=resolve(dirname(fileURLToPath(import.meta.url)),'runtime/server/index.mjs'), lockDirectory=resolve(dirname(script),'..'), timeoutMs=8000, spawnProcess=spawn,requiredFeatures=[],allowReplace=false,autoStart=true }={}) {
   const url=new URL(endpoint);
   if(url.protocol!=='http:' || !['127.0.0.1','localhost'].includes(url.hostname)) throw Error('Spy requires a local HTTP collector');
   let replaced=false;
@@ -23,6 +23,7 @@ export async function ensureCollector({ endpoint='http://127.0.0.1:4317', script
     return data;
   };
   const ready=await health();if(ready)return {...ready,started:false};
+  if (!autoStart) throw Error('Spy viewer is stopped. Run start.cmd or sh start.sh; the bridge will reconnect.');
   await mkdir(lockDirectory,{recursive:true});
   const lock=resolve(lockDirectory,`collector-${url.port||80}.lock`),deadline=Date.now()+timeoutMs;
   let handle;

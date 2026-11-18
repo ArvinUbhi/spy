@@ -44,3 +44,9 @@ test('launcher replaces a verified legacy Spy collector without touching unrelat
   const next=await ensureCollector({endpoint,script:resolve('server/index.mjs'),lockDirectory:dir,requiredFeatures:['skill-events','context-transfers'],allowReplace:true});pid=next.pid;assert.notEqual(pid,legacy.pid);assert.ok(next.features.includes('context-transfers'));
  }finally{if(pid)process.kill(pid);if(legacy.exitCode===null)legacy.kill();await rm(dir,{recursive:true,force:true});}
 });
+
+test('bridge reconnect mode never launches a hidden collector when the viewer is closed',async()=>{
+  const endpoint=`http://127.0.0.1:${await freePort()}`;let launches=0;
+  await assert.rejects(ensureCollector({endpoint,autoStart:false,spawnProcess:()=>{launches++;}}),/Run start.cmd/);
+  assert.equal(launches,0);
+});
