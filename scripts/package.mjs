@@ -8,7 +8,7 @@ const files = {};
 const excluded = new Set(['node_modules', '.git', 'release', '.codex', 'reports', 'test-results']);
 async function walk(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
-    if (excluded.has(entry.name) || entry.name.endsWith('.log')) continue;
+    if (excluded.has(entry.name) || entry.name.startsWith('.spy-e2e-history-') || entry.name.endsWith('.log')) continue;
     const path = resolve(dir, entry.name);
     if (entry.isDirectory()) await walk(path);
     else if (entry.isFile()) files['spy/' + relative(root, path).replaceAll('\\', '/')] = new Uint8Array(await readFile(path));

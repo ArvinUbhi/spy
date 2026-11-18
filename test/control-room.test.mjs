@@ -62,3 +62,10 @@ test('unchanged registry confirmations do not bury activity history or become st
  for(let i=1;i<=40;i++)st.ingest(packet('viewer.task_state',state),now+i*5000);
  assert.equal(st.sessions.get('s').agents.worker.events.length,before);assert.equal(st.snapshot(now+200001)[0].agents.find(a=>a.id==='worker').status,'running');
 });
+
+test('registry-first attachment later correlates lifecycle events without duplicate nodes',()=>{
+ const st=new Store(),now=Date.now();st.ingest(packet('viewer.task_state',{toolCallId:'call',agentId:'task',runtimeTaskId:'task',state:'running',name:'Verifier'}),now);
+ st.ingest(packet('subagent.started',{toolCallId:'call',agentId:'trajectory',agentDisplayName:'Verifier'}),now+1);
+ st.ingest(packet('subagent.completed',{},'trajectory'),now+2);
+ const workers=Object.values(st.sessions.get('s').agents).filter(a=>a.id!=='root');assert.equal(workers.length,1);assert.equal(workers[0].id,'task');assert.equal(workers[0].status,'completed');
+});

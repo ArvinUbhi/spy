@@ -11,4 +11,4 @@
 - Send prompts to the coordinator or identified subagent tasks through the host SDK, with queued/sending/delivered/failed status, idempotent acknowledgements and no automatic prompt redelivery. Unsupported/offline/finished targets are disabled.
 - Install the new control bridge module and require matching collector features on upgrades.
 
-Validation: backend/integration tests, synthetic benchmark and memory soak, clean ZIP verification, and real Copilot CLI 1.0.114 with an isolated local model fixture. Local Chromium execution was blocked by the build environment's socket restrictions; browser regressions are included for CI. Paid model delivery and enterprise policies require a signed-in host.
+Validation: backend/integration tests, synthetic benchmark and memory soak, clean ZIP verification, and real Copilot CLI 1.0.114 with an isolated local model fixture. The 15 Chromium browser/resource tests passed in GitHub CI; local Chromium execution was blocked by the build environment's socket restrictions. Paid model delivery and enterprise policies require a signed-in host.

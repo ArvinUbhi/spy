@@ -50,7 +50,7 @@ export class Store {
     if (type === 'viewer.heartbeat') { if (s.status === 'disconnected') s.status = 'connected'; return s; }
     if (type === 'viewer.disconnect' || type === 'session.shutdown') { s.status = 'disconnected'; return s; }
     if (type === 'viewer.metadata') { if (d.title || (!s.named && d.name)) s.name = clip(d.title || d.name); if(d.title)s.named=true; if(d.capabilities)s.capabilities=d.capabilities; return s; }
-    if(type==='viewer.task_state'&&d.toolCallId&&s.aliases[d.toolCallId]){s.aliases[d.agentId]=s.aliases[d.toolCallId];}
+    if(type==='viewer.task_state'&&d.toolCallId&&d.agentId){if(s.aliases[d.toolCallId])s.aliases[d.agentId]=s.aliases[d.toolCallId];else s.aliases[d.toolCallId]=d.agentId;}
     const requestedOwner=s.pendingRequests[d.requestId] || d.ownerAgentId;
     const origin=requestedOwner?(s.aliases[requestedOwner]||requestedOwner):(event.agentId||d.agentId)?(s.aliases[event.agentId||d.agentId]||event.agentId||d.agentId):'root';
     if (type === 'tool.execution_start' && d.toolCallId) { s.calls[d.toolCallId] = origin; if (Object.keys(s.calls).length > 320) delete s.calls[Object.keys(s.calls)[0]]; }
