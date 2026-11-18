@@ -8,7 +8,7 @@ const hash=id=>createHash('sha256').update(id).digest('hex').slice(0,32);
 const kind=t=>t==='viewer.delegated_prompt'||t==='user.message'||t==='assistant.message'||t==='assistant.message_delta'||t.startsWith('viewer.prompt_')?'messages':t.startsWith('tool.')?'tools':/permission|user_input|elicitation/.test(t)?'requests':t.startsWith('subagent.')?'agents':'activity';
 export function archiveOwner(store,packet){const s=store.sessions.get(packet.sessionId),e=packet.event,d=e.data||{};const resolve=id=>s?.aliases[id]||id;if(s?.pendingRequests[d.requestId])return s.pendingRequests[d.requestId];if(typeof e.type!=='string')return 'root';return e.type.startsWith('subagent.')?resolve(d.toolCallId)||resolve(d.agentId||e.agentId)||'root':e.type.startsWith('tool.')?(s?.calls[d.toolCallId]||resolve(e.agentId||d.agentId)||'root'):resolve(d.ownerAgentId||e.agentId||d.agentId||d.parentToolCallId)||'root';}
 export class Archive {
- constructor(root=null,{segmentBytes=MiB,segmentEvents=250}={}){this.root=root;this.segmentBytes=segmentBytes;this.segmentEvents=segmentEvents;this.sessions=new Map();this.settings={...ARCHIVE_DEFAULTS};this.pending=Promise.resolve();this.failedWrites=new Set();this.error=null;this.dirty=false;this.recovered=0;this.readers=0;}
+ constructor(root=null,{segmentBytes=MiB,segmentEvents=250}={}){this.root=root;this.segmentBytes=segmentBytes;this.segmentEvents=segmentEvents;this.sessions=new Map();this.settings={...ARCHIVE_DEFAULTS};this.pending=Promise.resolve();this.failedWrites=new Map();this.failedBytes=0;this.error=null;this.dirty=false;this.recovered=0;this.readers=0;}
  async init(){
   if(!this.root)return;await mkdir(this.root,{recursive:true,mode:0o700});let known=new Map();
   try{const index=JSON.parse(await readFile(join(this.root,'index.json'),'utf8'));this.settings=this.validateSettings(index.settings);known=new Map((index.sessions||[]).map(s=>[s.id,s]));}catch(e){if(e.code!=='ENOENT')this.recovered++;}
@@ -27,8 +27,8 @@ export class Archive {
    for(const r of records)if(!known.has(s.id)||r.cursor>=(known.get(s.id).next||1))this.summarize(s,r);
    for(const r of records)if(r.event.id)s.seen.add(r.event.id);
   }
-  for(const s of this.sessions.values()){s.seen||=new Set();s.segments.sort((a,b)=>a.start-b.start);s.next=Math.max(s.next||1,...s.segments.map(x=>x.end+1));}
-  await this.prune();await this.persist();
+  for(const s of this.sessions.values()){s.seen||=new Set();s.segments.sort((a,b)=>a.start-b.start);s.next=Math.max(s.next||1,...s.segments.map(x=>x.end+1));s.pruned=Math.max(s.pruned||0,s.next-1-s.segments.reduce((n,x)=>n+x.count,0));}
+  await this.prune();await this.persist(true);
  }
  newSession(r){return {id:r.sessionId,name:r.sessionName||'Copilot session',cwd:r.cwd||'',source:r.source||'live',startedAt:r.at,lastSeen:r.at,next:1,agents:Object.create(null),segments:[],pruned:0,seen:new Set()};}
  validateSettings(value={}){const result={...ARCHIVE_DEFAULTS,...value};for(const [key,min,max]of [['days',1,365],['totalMiB',64,4096],['sessionMiB',16,1024]])if(!Number.isInteger(result[key])||result[key]<min||result[key]>max)throw Error(`${key} must be an integer from ${min} to ${max}`);if(result.sessionMiB>result.totalMiB)throw Error('Session budget cannot exceed the total budget');return result;}
@@ -43,17 +43,17 @@ export class Archive {
    if(!s){s=this.newSession(record);this.sessions.set(s.id,s);}
    record.cursor=s.next;const line=JSON.stringify(record)+'\n',bytes=Buffer.byteLength(line);if(bytes>512000)throw Error('Archive event exceeds 512 KB');
    let seg=s.segments.at(-1);if(!seg||seg.bytes+bytes>this.segmentBytes||seg.count>=this.segmentEvents){seg={file:hash(s.id)+'-'+s.next+'.jsonl',start:s.next,end:s.next,bytes:0,count:0,agents:[],at};s.segments.push(seg);}
-   if(this.root&&record.source!=='demo')await appendFile(join(this.root,seg.file),line,{mode:0o600});else{seg.records||=[];seg.records.push(record);}
+   if(this.root&&record.source!=='demo'){try{await appendFile(join(this.root,seg.file),line,{mode:0o600});}catch(e){await truncate(join(this.root,seg.file),seg.bytes).catch(()=>{});throw e;}}else{seg.records||=[];seg.records.push(record);}
    seg.bytes+=bytes;seg.count++;seg.end=record.cursor;seg.at=at;if(!seg.agents.includes(record.agentId))seg.agents.push(record.agentId);
    s.next++;s.lastSeen=Math.max(s.lastSeen,at);s.name=record.sessionName;s.cwd=record.cwd;this.summarize(s,record,session);if(event.id){s.seen.add(event.id);if(s.seen.size>8192)s.seen.delete(s.seen.values().next().value);}
    this.dirty=true;this.error=null;
-  }).then(value=>{this.failedWrites.delete(key);return value;},error=>{this.failedWrites.add(key);throw error;});
+  }).then(value=>{const old=this.failedWrites.get(key);if(old)this.failedBytes-=old.bytes;this.failedWrites.delete(key);return value;},error=>{if(!this.failedWrites.has(key)){const bytes=Buffer.byteLength(JSON.stringify(packet));this.failedWrites.set(key,{packet,owner,session,bytes});this.failedBytes+=bytes;while(this.failedWrites.size>256||this.failedBytes>8*MiB){const first=this.failedWrites.keys().next().value;this.failedBytes-=this.failedWrites.get(first).bytes;this.failedWrites.delete(first);}}throw error;});
  }
  summarize(s,r,session){s.agents||=Object.create(null);const current=session?.agents?.[r.agentId],d=r.event.data||{},type=r.event.type;
   if(Object.getPrototypeOf(s.agents)!==null)s.agents=Object.assign(Object.create(null),s.agents);if(!Object.hasOwn(s.agents,r.agentId))s.agents[r.agentId]={id:r.agentId,name:current?.name||d.agentDisplayName||d.agentName||(r.agentId==='root'?'Orchestrator':r.agentId),startedAt:r.at,lastActivity:r.at,status:'unknown',tools:{},events:[],skills:[],turns:0,tokens:0};
-  const a=s.agents[r.agentId];if(d.agentDisplayName)a.name=d.agentDisplayName;if(d.model)a.model=d.model;if(type==='subagent.completed')a.status='completed';if(type==='subagent.failed')a.status='failed';if(current)for(const key of ['name','model','parentId','status','runtimeTaskId','toolCalls','toolFailures','turns','tokens','task'])if(current[key]!==undefined)a[key]=current[key];a.lastActivity=r.at;a.messageCount=(a.messageCount||0)+Number(kind(type)==='messages');a.requestCount=(a.requestCount||0)+Number(/\.requested$/.test(type));a.eventTotal=(a.eventTotal||0)+1;
+  const a=s.agents[r.agentId];if(d.agentDisplayName)a.name=d.agentDisplayName;if(d.model)a.model=d.model;if(type==='subagent.completed')a.status='completed';if(type==='subagent.failed')a.status='failed';if(current)for(const key of ['name','model','parentId','status','runtimeTaskId','toolCalls','toolFailures','turns','tokens','task','usage','runs','stateMs','observedState','stateSince'])if(current[key]!==undefined)a[key]=current[key];a.lastActivity=r.at;a.messageCount=(a.messageCount||0)+Number(kind(type)==='messages');a.requestCount=(a.requestCount||0)+Number(/\.requested$/.test(type));a.eventTotal=(a.eventTotal||0)+1;
  }
- async persist(){if(!this.root)return;const sessions=[...this.sessions.values()].filter(s=>s.source!=='demo').map(({seen,...s})=>s);const data=JSON.stringify({version:1,settings:this.settings,sessions});await writeFile(join(this.root,'index.json.tmp'),data,{mode:0o600});await rename(join(this.root,'index.json.tmp'),join(this.root,'index.json'));this.dirty=false;}
+ async persist(force=false){if(!this.root||(!force&&!this.dirty))return;const sessions=[...this.sessions.values()].filter(s=>s.source!=='demo').map(({seen,...s})=>s);const data=JSON.stringify({version:1,settings:this.settings,sessions});await writeFile(join(this.root,'index.json.tmp'),data,{mode:0o600});await rename(join(this.root,'index.json.tmp'),join(this.root,'index.json'));this.dirty=false;}
  async prune(now=Date.now()){
   if(this.readers)return;
   const cutoff=now-this.settings.days*86400000;let total=0;const all=[];
@@ -66,8 +66,8 @@ export class Archive {
   all.sort((a,b)=>a.seg.at-b.seg.at);for(const {s,seg}of all){if(total<=this.settings.totalMiB*MiB)break;await remove(s,seg);total-=seg.bytes;}
   for(const [id,s]of this.sessions)if(!s.segments.length&&s.lastSeen<cutoff)this.sessions.delete(id);
  }
- async flush(){await this.pending;if(this.failedWrites.size)throw Error(this.error||'Events could not be archived');await this.run(async()=>{await this.prune();await this.persist();this.error=null;});}
- async configure(settings){const next=this.validateSettings(settings);await this.run(async()=>{this.settings=next;await this.prune();await this.persist();});return this.info();}
+ async flush(){await this.pending;for(const retry of [...this.failedWrites.values()])await this.append(retry.packet,retry.owner,retry.session).catch(()=>{});if(this.failedWrites.size)throw Error(this.error||'Events could not be archived');await this.run(async()=>{await this.prune();await this.persist();this.error=null;});}
+ async configure(settings){const next=this.validateSettings(settings);await this.run(async()=>{this.settings=next;await this.prune();await this.persist(true);});return this.info();}
  info(){const sessions=[...this.sessions.values()];return {settings:this.settings,bytes:sessions.reduce((n,s)=>n+s.segments.reduce((n,x)=>n+x.bytes,0),0),events:sessions.reduce((n,s)=>n+s.segments.reduce((n,x)=>n+x.count,0),0),sessions:sessions.length,pruned:sessions.reduce((n,s)=>n+(s.pruned||0),0),error:this.error,recovered:this.recovered,persistent:!!this.root};}
  list(){return [...this.sessions.values()].filter(s=>s.source!=='demo').map(s=>({id:s.id,name:s.name,cwd:s.cwd,source:s.source,startedAt:s.startedAt,lastSeen:s.lastSeen,nodeCount:Object.keys(s.agents).length,eventCount:s.segments.reduce((n,x)=>n+x.count,0),pruned:s.pruned,archived:true})).sort((a,b)=>b.lastSeen-a.lastSeen);}
  view(id){const s=this.sessions.get(id);if(!s)return null;return {...this.list().find(x=>x.id===id),id:s.id,name:s.name,cwd:s.cwd,status:'disconnected',source:s.source,agents:Object.values(s.agents).slice(0,160).map(a=>({...a,connectionLost:true})),edges:Object.values(s.agents).filter(a=>a.parentId&&s.agents[a.parentId]).map(a=>({id:'archive:'+a.id,source:a.parentId,target:a.id,kind:'delegation',label:'delegated',inferred:false})),contexts:[],notices:[],loops:[],timeline:[],skillCatalog:[],agentCatalog:[],runningCount:0,archived:true};}

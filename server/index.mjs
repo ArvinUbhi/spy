@@ -80,7 +80,7 @@ export async function createViewer({ port = defaultPort, production = process.ar
       if(url.pathname.startsWith('/api/clear/')){let id;try{id=decodeURIComponent(url.pathname.slice('/api/clear/'.length));}catch{return json(400,{error:'Invalid session ID'});}const ok=store.clearDetails(id);changed();return json(ok?200:404,{ok});}
       if(['/api/prompts','/api/commands/pull','/api/commands/ack'].includes(url.pathname)){
         try{let body='',bytes=0;for await(const chunk of req){bytes+=chunk.length;if(bytes>32000)return json(413,{error:'Payload too large'});body+=chunk;}const d=JSON.parse(body);
-          if(url.pathname==='/api/prompts'){const c=commands.submit(store.sessions.get(d.sessionId),d.agentId,d.prompt);store.ingest({sessionId:d.sessionId,event:{id:'prompt:'+c.id,type:'viewer.prompt_queued',agentId:d.agentId,data:{content:c.prompt,commandId:c.id,status:'queued'}}});await archive.flush();return json(202,{id:c.id,status:c.status});}
+          if(url.pathname==='/api/prompts'){const c=commands.submit(store.sessions.get(d.sessionId),d.agentId,d.prompt);c.status='archiving';try{store.ingest({sessionId:d.sessionId,event:{id:'prompt:'+c.id,type:'viewer.prompt_queued',agentId:d.agentId,data:{content:c.prompt,commandId:c.id,status:'queued'}}});await archive.flush();c.status='queued';}catch(e){c.status='failed';c.error='Prompt was not dispatched because history could not be saved';throw e;}return json(202,{id:c.id,status:c.status});}
           const s=store.sessions.get(d.sessionId);if(!s||!d.bridgeId||s.coverage?.bridgeId!==d.bridgeId)return json(403,{error:'Bridge identity mismatch'});
           if(url.pathname.endsWith('/pull'))return json(200,{commands:commands.pull(d.sessionId,d.bridgeId)});
           const c=commands.acknowledge(d.id,d.bridgeId,d.status,d.error);store.ingest({sessionId:d.sessionId,event:{id:'delivery:'+c.id,type:'viewer.prompt_delivery',agentId:c.agentId,data:{commandId:c.id,status:c.status,error:c.error}}});await archive.flush();return json(200,c);
@@ -97,7 +97,7 @@ export async function createViewer({ port = defaultPort, production = process.ar
         archiveStage=true;await archive.flush();
         metrics.accepted(batch.length);
         changed(); json(200, { accepted: batch.length });
-      } catch (error) { json(archiveStage?503:400, { error: error.message }); }
+      } catch (error) { if(archiveStage)changed();json(archiveStage?503:400, { error: error.message }); }
       return;
     }
     if (vite) return vite.middlewares(req, res);
