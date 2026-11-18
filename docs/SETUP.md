@@ -39,6 +39,7 @@ The bridge uses a bounded queue and batch limits. Live projection is coalesced a
 
 ## Troubleshooting
 
+- **Spy failed on Copilot 1.0.113:** use Spy 0.4.3 or later and reload extensions. That CLI supplies the Microsoft SDK import and v2 tool options; older Spy bridges used the GitHub SDK import. No separate SDK install is required. Double-click diagnose.cmd to show CLI/Node versions, bridge path and missing files; its window stays open.
 - **No sessions:** check that `copilot` is signed in, the CLI supports extensions, Spy is enabled and the session started after installation. Experimental extension availability may be controlled by enterprise policy.
 - **Already-running sessions:** ask Copilot `Reload my extensions`, then check `/extensions manage`; alternatively open a fresh session. Do not restart work just to recover history; Spy only captures live events after attachment.
 - **Wrong service on port 4317:** Spy refuses to send telemetry to a service that does not identify itself as Spy. Choose another port.

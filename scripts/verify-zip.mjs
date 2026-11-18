@@ -19,7 +19,7 @@ try {
   const install = spawnSync(process.execPath, ['scripts/install-bridge.mjs'], { cwd: app, env: { ...process.env, SPY_EXTENSION_DIR: extension }, encoding: 'utf8' });
   assert.equal(install.status, 0, install.stderr);
   assert.match(await readFile(resolve(extension, 'extension.mjs'), 'utf8'), /Spy session bridge/);
-  for(const path of ['core.mjs','collector.mjs','runtime/server/metrics.mjs','runtime/dist/index.html']) await access(resolve(extension,path));
+  for(const path of ['core.mjs','collector.mjs','sdk.mjs','runtime/server/metrics.mjs','runtime/dist/index.html']) await access(resolve(extension,path));
   child = spawn(process.execPath, ['server/index.mjs', '--production', '--port', '0'], { cwd: app, stdio: ['ignore', 'pipe', 'pipe'] });
   const base = await new Promise((yes, no) => {
     let output = ''; const timer = setTimeout(() => no(new Error('ZIP server startup timed out')), 10000);

@@ -39,7 +39,7 @@ jobs:
           path: release/*.zip
   benchmark:
     runs-on: ubuntu-latest
-    needs: [check, browser]
+    needs: [check, browser, cli-compatibility]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -74,3 +74,27 @@ jobs:
         with:
           name: browser-test-results
           path: reports/
+
+  cli-compatibility:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm install --prefix "${{ runner.temp }}/spy-copilot" --ignore-scripts --no-audit --no-fund @github/copilot@1.0.113
+      - run: npm run test:cli
+        env:
+          SPY_COPILOT_CLI: ${{ runner.temp }}/spy-copilot/node_modules/@github/copilot/npm-loader.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-cli-compatibility-${{ matrix.os }}
+          path: reports/cli-compatibility.json

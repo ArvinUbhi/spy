@@ -47,3 +47,8 @@ Spy is a local React dashboard for observing and designing GitHub Copilot CLI or
 - Startup keeps the collector in the command window and stops the previous verified Spy PID on the selected port.
 - `stop.cmd` / `sh stop.sh` stops a hidden legacy collector before updates; unrelated Node/Copilot processes are left running.
 - Updated bridges reconnect to an open viewer without starting hidden collectors. Reload existing extensions after updating.
+
+## v0.4.3
+
+- Fixed Copilot 1.0.113 extension startup: supports Microsoft SDK v2 imports/tool definitions and older GitHub SDK hosts. No extra SDK installation.
+- Real CLI compatibility tests verify extension startup, spy_observe registration and live heartbeat/events using an offline local model fixture. CI pins Node 22.14 and Copilot 1.0.113 on Windows/Linux.

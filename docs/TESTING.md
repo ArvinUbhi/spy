@@ -56,6 +56,8 @@ An automated synthetic pass cannot replace this acceptance check against your in
 
 ## Spy 0.4 retention and skill exports
 
-72 unit/integration tests and 13 browser/resource tests cover byte-bounded queues, repeated alias IDs, idle/uninspected payload cleanup, SSE limits/teardown, hidden-tab release, manual clear, skill definitions/assignments and both skill/plugin ZIP layouts. `npm run test:memory` exercises 58,752 synthetic events across 12 cleanup rounds and publishes `reports/memory-soak.json`. This tests retention regressions, not every possible leak or real signed-in Copilot execution.
+75 unit/integration tests and 13 browser/resource tests cover byte-bounded queues, repeated alias IDs, idle/uninspected payload cleanup, SSE limits/teardown, hidden-tab release, manual clear, skill definitions/assignments and both skill/plugin ZIP layouts. `npm run test:memory` exercises 58,752 synthetic events across 12 cleanup rounds and publishes `reports/memory-soak.json`. This tests retention regressions, not every possible leak or real signed-in Copilot execution.
 
 Lifecycle checks exercise a live bridge across manual viewer shutdown/restart, refuse unrelated processes, and verify extracted-ZIP foreground PID ownership, replacement, stop and folder cleanup across the OS/Node matrix.
+
+`npm run test:cli` uses the real Copilot host and bundled SDK with an isolated temporary Copilot home and a loopback model fixture. Set SPY_COPILOT_CLI to a Copilot executable or npm-loader.js. CI pins Copilot 1.0.113 and Node 22.14 on Windows/Linux; reports/cli-compatibility.json records the result. The fixture verifies startup, tool registration and live bridge events/heartbeat without a sign-in or API key; it does not establish enterprise policy or paid-model acceptance.
