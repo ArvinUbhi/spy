@@ -21,7 +21,7 @@ let busy = false, ready = false, connecting = false, lastConnect = 0, lastError 
 async function connect() {
   if (connecting || Date.now()-lastConnect<2000) return;
   connecting=true;lastConnect=Date.now();
-  try { await ensureCollector({endpoint,autoStart:false,requiredFeatures:['skill-events','context-transfers','agent-states','diagnostics','retention','skill-authoring','prompt-control','session-history','automatic-loops']}); ready=true;lastError=''; } catch(error) { ready=false;if(lastError!==error.message){lastError=error.message;console.error('[Spy] '+error.message);} } finally { connecting=false; }
+  try { await ensureCollector({endpoint,autoStart:false,requiredFeatures:['skill-events','context-transfers','agent-states','diagnostics','retention','skill-authoring','prompt-control','session-history','automatic-loops','event-archive','agent-workspace']}); ready=true;lastError=''; } catch(error) { ready=false;if(lastError!==error.message){lastError=error.message;console.error('[Spy] '+error.message);} } finally { connecting=false; }
 }
 void connect();
 let previousCpu=process.cpuUsage(),previousAt=performance.now(),bridgeMetrics;
@@ -60,7 +60,7 @@ async function flush() {
     const dropped = queue.drainDropped();
     if (dropped) enqueue({ type: 'viewer.structure_change', data: { message: `${dropped} events dropped while collector was unavailable. Graph may be incomplete; start a fresh session for full coverage.` } });
   } catch { queue.retry(batch); ready=false; }
-  finally { busy = false; }
+  finally { busy = false;if(ready&&queue.size&&!shuttingDown)setImmediate(()=>void flush()); }
 }
 let controlling=false;
 const completedCommands=new Map();

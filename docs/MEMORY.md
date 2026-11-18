@@ -4,7 +4,7 @@ Spy retains bounded local session history, including visible prompts, arguments 
 
 | Data | Retention / budget |
 |---|---|
-| Bridge delivery queue | At most 128 packets and 512,000 encoded bytes; batches at most 240,000 bytes. Overflow/oversized packets are dropped and reported. |
+| Bridge delivery queue | At most 2,048 packets and 8 MiB encoded bytes; batches at most 480,000 bytes. Overflow/oversized packets are dropped and reported. |
 | Sessions | At most 40. Sessions expire after seven days without bridge contact. |
 | Uninspected session details | Retained when switching sessions; only explicit clearing or byte budgets remove payloads. |
 | Idle session details | Retained while idle within byte budgets. |
@@ -25,3 +25,11 @@ Cleanup does not depend on a browser being connected. **Clear details** releases
 The launcher owns the foreground collector directly; it does not detach a server process. Ctrl+C saves local history and closes the server; closing its command window terminates that process. Start/stop scripts identify a prior collector through loopback health and wait for its PID to exit. Updated bridges never auto-start hidden collectors.
 
 Tool counters and token usage aggregates survive detail trimming. Automatic loop checks retain up to 60 SHA-256 argument fingerprints per agent (12 after budget trimming), without storing a second copy of arguments. Pending prompts are transient, bounded to 100 commands, expire after five minutes, and are never replayed from history. A dispatch without acknowledgement is reported as unconfirmed; check Copilot before resending.
+
+## Durable event archive
+
+The live projection's 120 events / 24 tools are a cache, not the transcript. Captured events are appended separately to `SPY_HISTORY_PATH + .archive/` (normally `~/.copilot/spy/history.json.archive/`). Segments rotate at approximately 1 MiB or 250 events. The manifest is atomically replaced; startup reconciles files and recovers torn final lines. Event IDs are deduplicated across retries. HTTP batches receive success only after their archive appends and manifest persist succeed. Power-loss durability depends on the operating system; disk failures surface in the UI and produce retryable HTTP 503 responses.
+
+Defaults: 30 days, 512 MiB total and 128 MiB/session. History & storage supports up to 365 days, 4 GiB total and 1 GiB/session. Oldest complete segments are pruned first. Exports temporarily hold pruning to avoid incomplete downloads. Archive-only sessions remain browsable after the seven-day live snapshot expires. Browser pages load 50 events at a time and hold up to 500; older browsing pauses live refresh. Search scans bounded portions per page; continue loading older pages to search further. Exports stream the entire retained agent transcript independently of page/filter state.
+
+Payload fields retain up to 64,000 characters within a 192,000-byte event-data budget. Larger values are explicitly marked truncated. Streaming deltas are archived and reconstructed into messages; final messages replace corresponding visible chunks. Private reasoning is excluded. Existing old snapshot content can be migrated, but data already lost before this upgrade cannot be recovered.

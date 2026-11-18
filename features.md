@@ -52,3 +52,7 @@ Spy is a local React dashboard for observing and designing GitHub Copilot CLI or
 
 - Fixed Copilot 1.0.113 extension startup: supports Microsoft SDK v2 imports/tool definitions and older GitHub SDK hosts. No extra SDK installation.
 - Real CLI compatibility tests verify extension startup, spy_observe registration and live heartbeat/events using an offline local model fixture. CI pins Node 22.14 and Copilot 1.0.113 on Windows/Linux.
+
+## v0.6 agent workspaces
+
+Double-click agents for searchable captured conversations, tool arguments/results, permission/input requests, paginated activity, copy and Markdown/JSONL export. Needs attention links to problematic agents. History & storage offers 30-day / 512 MB defaults, larger configurable budgets, archive-only sessions, snapshot migration and crash-tail recovery.

@@ -1,3 +1,4 @@
+import {archiveOwner} from './archive.mjs';
 import {RETENTION,maintain,compactMaps,budgetSession,trimDetails} from './retention.mjs';
 import { transport, instrument } from './diagnostics.mjs';
 import { observe, recordContext, delegatedPrompt } from './observability.mjs';
@@ -8,6 +9,12 @@ const clip = value => (typeof value === 'string' ? value : JSON.stringify(value 
 export class Store {
   sessions = new Map();
   ingest(packet, now = Date.now()) {
+    const owner=packet?.event?.data?archiveOwner(this,packet):'root';
+    const result=this._ingest(packet,now);
+    this.onEvent?.(packet,result.aliases[owner]||owner,result);
+    return result;
+  }
+  _ingest(packet, now = Date.now()) {
     if (!packet || typeof packet.sessionId !== 'string' || packet.sessionId.length > 200) throw new Error('sessionId required');
     const event = packet.event;
     if (!event || typeof event.type !== 'string' || event.type.length > 100 || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) throw new Error('event.type and event.data required');

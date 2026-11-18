@@ -14,7 +14,7 @@ One browser subscription receives the selected graph plus lightweight summaries 
 
 ## Memory limits
 
-40 sessions, 160 agents/session, 120 activity entries/agent, 24 tools/agent, 400 explicit edges/session and 128 queued events/bridge. Additional active tools are omitted with a visibility-cap message; older completed tools/nodes are evicted first. Sessions expire seven days after last bridge contact. Context transfers retain at most 120 records/session with 6,000-character payloads. Agents retain 20 skill records with 2,000-character content excerpts; session catalogs retain 60 definitions each. These limits bound display state rather than constrain Copilot's actual work.
+40 sessions, 160 agents/session, 120 activity entries/agent, 24 tools/agent, 400 explicit edges/session and 2,048 queued events/bridge. Additional active tools are omitted with a visibility-cap message; older completed tools/nodes are evicted first. Sessions expire seven days after last bridge contact. Context transfers retain at most 120 records/session with 6,000-character payloads. Agents retain 20 skill records with 2,000-character content excerpts; session catalogs retain 60 definitions each. These limits bound display state rather than constrain Copilot's actual work.
 
 ## Designing orchestration
 
@@ -57,3 +57,7 @@ The ZIP's production collector uses only Node built-ins; build tools are not loa
 ## Custom observation events
 
 `spy_observe` accepts `viewer.context_handoff` (`source`, `target`, optional `payload`, `summary`, `mode`), `viewer.context_mode` (`agentId`, `mode`), `viewer.agent_state` (`agentId`, `state`, `reason`) and `viewer.structure_change` (`message`). These are observer annotations, not execution controls. The same packets can be posted to the local event endpoint. Mode is `shared`, `isolated` or `unknown`. State is `running`, `idle`, `waiting`, `blocked`, `completed`, `failed`, `cancelled` or `unknown`. Native tool/skill payloads have runtime provenance; annotations cannot promote themselves to runtime evidence.
+
+## Event archive and agent workspace
+
+The store emits validated captured events with resolved agent ownership to a segmented local archive. This path is separate from snapshot byte-budget trimming. Archive pages are read on demand through `/api/history`; `/api/history/export` streams Markdown or JSONL. Retention settings use `/api/history/settings` and persist in the archive manifest. Bridge heartbeats and repetitive task-registry confirmations are not journaled; visible streaming deltas and final responses are. Private reasoning remains excluded. Permission/input completions retain their original request owner even when the envelope omits agentId. Archived agent summaries can rebuild a browsable graph after hot session expiry. The full agent workspace is accessible by double-click and by an explicit inspector button, with focus management, Escape, search, and readable mobile layout.

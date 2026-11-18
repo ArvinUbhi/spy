@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — 2026-11-18
+
+- Add a disk-backed segmented event archive, independent of the small live graph cache. Default retention is 30 days / 512 MB total / 128 MB per session; users can adjust this in History & storage.
+- Double-click an agent for a full workspace with conversation, paired tool arguments/results, permission/input requests, raw activity and overview. Add search, failure filters, pagination, copy, Markdown/JSONL exports, pause/resume, keyboard access and related-agent navigation.
+- Add a Needs attention panel for failed, blocked, waiting, stale and possibly looping agents.
+- Archive captured streamed text, prompts and delivery receipts. Migrate available old snapshot content on upgrade without replaying any commands. Retain archive-only sessions after the live snapshot expires.
+- Increase bridge payload capture to 64,000 characters per field / 192 KB per event and its delivery buffer to 2,048 events / 8 MB. Drain queued batches immediately after successful delivery.
+- Recover incomplete final writes, deduplicate transport retries and show archive failures/retention boundaries. Keep browser history windows bounded while exports cover the full retained agent transcript.
+
 ## 0.5.0 — 2026-11-18
 
 - Separate Live sessions, Design builder and Stats pages, with persistent navigation and larger typography/controls on desktop and phones.
