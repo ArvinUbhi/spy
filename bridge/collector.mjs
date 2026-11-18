@@ -1,18 +1,41 @@
 // Shared local collector, installed once. No gh executable or database required.
 import { spawn } from 'node:child_process';
+import { request } from 'node:http';
 import { open, stat, unlink, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const delay = ms => new Promise(r=>setTimeout(r,ms));
+// Collector traffic must not use the Copilot host's fetch dispatcher/proxy path.
+export async function requestCollector(endpoint, { method = 'GET', headers, body, timeoutMs = 1500 } = {}) {
+  const url = new URL(endpoint);
+  if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname)) throw Error('Spy requires a local HTTP collector');
+  return new Promise((resolve, reject) => {
+    const req = request(url, { method, headers, agent: false, signal: AbortSignal.timeout(timeoutMs) }, res => {
+      const chunks = []; let bytes = 0;
+      res.on('error', reject);
+      res.on('data', chunk => {
+        bytes += chunk.length;
+        if (bytes > 512000) {
+          const error = Error('Spy collector response exceeds 512,000 bytes');
+          res.destroy(error); req.destroy(error); reject(error); return;
+        }
+        chunks.push(chunk);
+      });
+      res.on('end', () => resolve({ status: res.statusCode, contentType: res.headers['content-type'] || 'unknown', body: Buffer.concat(chunks).toString('utf8') }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
 export async function ensureCollector({ endpoint='http://127.0.0.1:4317', script=resolve(dirname(fileURLToPath(import.meta.url)),'runtime/server/index.mjs'), lockDirectory=resolve(dirname(script),'..'), timeoutMs=8000, spawnProcess=spawn,requiredFeatures=[],allowReplace=false,autoStart=true }={}) {
   const url=new URL(endpoint);
   if(url.protocol!=='http:' || !['127.0.0.1','localhost'].includes(url.hostname)) throw Error('Spy requires a local HTTP collector');
   let replaced=false;
   const health=async()=>{
     let response;
-    try { response=await fetch(new URL('/api/health',url),{signal:AbortSignal.timeout(300)}); } catch {return null;}
-    let data;try{data=await response.json();}catch{throw Error('Spy port is occupied by another service');}
-    if(!response.ok || data.service!=='spy' || data.protocol!==1)throw Error('Spy port is occupied by another service');
+    try { response=await requestCollector(new URL('/api/health',url),{timeoutMs:300}); } catch {return null;}
+    let data;try{data=JSON.parse(response.body);}catch{throw Error(`Spy health check returned a non-JSON response (HTTP ${response.status}, content-type ${response.contentType})`);}
+    if(response.status<200 || response.status>=300 || data.service!=='spy' || data.protocol!==1)throw Error(`Spy port is occupied by another service or an incompatible collector (HTTP ${response.status}, content-type ${response.contentType})`);
     if(!requiredFeatures.every(feature=>data.features?.includes(feature))){
       if(!allowReplace)throw Error('Spy collector is older than this bridge. Run the latest Spy startup script.');
       if(!replaced){if(!Number.isInteger(data.pid)||data.pid<=1||data.pid===process.pid)throw Error('Cannot safely identify the previous Spy collector');

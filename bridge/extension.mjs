@@ -2,7 +2,7 @@
 import { joinSpySession } from './sdk.mjs';
 import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ensureCollector } from './collector.mjs';
+import { ensureCollector, requestCollector } from './collector.mjs';
 import { createBuffer, projectEvent, metadataEvent } from './core.mjs';
 const endpoint = process.env.SPY_URL || 'http://127.0.0.1:4317';
 if (!['127.0.0.1', 'localhost'].includes(new URL(endpoint).hostname)) throw new Error('Spy bridge accepts loopback destinations only');
@@ -47,12 +47,12 @@ async function flush() {
   busy = true;
   const batch = queue.take();
   try {
-    const response = await fetch(endpoint + '/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Agent-Viewer': '1' }, body: JSON.stringify(batch), signal: AbortSignal.timeout(1500) });
+    const response = await requestCollector(endpoint + '/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Agent-Viewer': '1' }, body: JSON.stringify(batch), timeoutMs: 1500 });
     if (response.status === 400 || response.status === 413) {
       enqueue({ type: 'viewer.structure_change', data: { message: `Collector rejected ${batch.length} events (${response.status}); graph may be incomplete. Check CLI compatibility.` } });
       return;
     }
-    if (!response.ok) throw new Error(`Collector returned ${response.status}`);
+    if (response.status < 200 || response.status >= 300) throw new Error(`Collector returned ${response.status}`);
     const dropped = queue.drainDropped();
     if (dropped) enqueue({ type: 'viewer.structure_change', data: { message: `${dropped} events dropped while collector was unavailable. Graph may be incomplete; start a fresh session for full coverage.` } });
   } catch { queue.retry(batch); ready=false; }
