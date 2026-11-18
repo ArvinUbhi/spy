@@ -29,7 +29,7 @@ export function parallelism(s,now=Date.now()){
   return {peak,busyMs:busy,parallelMs:parallel,average:busy?work/busy:0,clipped:!!s.timelineClipped,rows:workers.map(a=>({id:a.id,name:a.name,status:a.status,times:stateTimes(a,s,now),runs:a.runs||[]}))};
 }
 export function loopHealth(s){
- const explicit=(s.loops||[]).map(l=>{const done=l.iterations.filter(i=>i.outcome!=='running'),tail=done.slice(-3);const repeating=tail.length===3&&tail.every(i=>i.outcome==='failed'&&i.progressKey&&i.progressKey===tail[0].progressKey);return {...l,repeating,failures:done.filter(i=>i.outcome==='failed').length,latest:l.iterations.at(-1),durations:done.map(i=>({iteration:i.iteration,ms:Math.max(0,i.at-i.start)})),evidence:'orchestrator'};});
+ const explicit=(s.loops||[]).map(l=>{const done=l.iterations.filter(i=>i.outcome!=='running'),tail=done.slice(-3);const repeating=tail.length===3&&tail.every(i=>i.outcome==='failed'&&i.progressKey&&i.progressKey===tail[0].progressKey);return {...l,repeating,failures:done.filter(i=>i.outcome==='failed').length,latest:l.iterations.at(-1),durations:done.map(i=>({iteration:i.iteration,ms:i.start===null?null:Math.max(0,i.at-i.start)})),evidence:'orchestrator'};});
  const feedback=(s.edges||[]).filter(e=>e.kind==='feedback').map(e=>({id:e.id,source:e.source,target:e.target,traversals:e.traversals||1,evidence:'control metadata'}));
  return {explicit,feedback};
 }

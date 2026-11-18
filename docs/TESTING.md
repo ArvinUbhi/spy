@@ -52,4 +52,4 @@ An automated synthetic pass cannot replace this acceptance check against your in
 
 ## Spy 0.3 diagnostics
 
-53 unit/integration tests cover timing overlap, bounded loops, usage attribution, design validation/drift, sequence gaps and the actual extension module against a synthetic SDK transport. Browser tests cover diagnostic tabs, critical-path highlighting and design import/export. A resource test reports Chromium processes, collector and five bridge processes in `reports/resources.json`; it is not real Copilot acceptance. `npm run doctor` checks prerequisites.
+54 unit/integration tests cover timing overlap, bounded loops, usage attribution, design validation/drift, sequence gaps and the actual extension module against a synthetic SDK transport. Browser tests cover diagnostic tabs, critical-path highlighting and design import/export. A resource test reports Chromium processes, collector and five bridge processes in `reports/resources.json`; it is not real Copilot acceptance. `npm run doctor` checks prerequisites.

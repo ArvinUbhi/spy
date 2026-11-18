@@ -36,6 +36,6 @@ export function instrument(s,a,event,at) {
     let loop=s.loops.find(l=>l.id===d.loopId);if(!loop){if(s.loops.length>=30)s.loops.shift();s.loops.push(loop={id:d.loopId.slice(0,200),iterations:[]});}
     const item={iteration:d.iteration,outcome:d.outcome,progressKey:String(d.progressKey||'').slice(0,300),at,agentId:a.id};
     const old=loop.iterations.find(i=>i.iteration===d.iteration);
-    if(old){item.start=old.start;Object.assign(old,item);}else{item.start=at;loop.iterations.push(item);loop.iterations.sort((a,b)=>a.iteration-b.iteration);if(loop.iterations.length>30){loop.iterations.shift();loop.clipped=true;}}
+    if(old){item.start=old.start;Object.assign(old,item);}else{item.start=d.outcome==='running'?at:null;loop.iterations.push(item);loop.iterations.sort((a,b)=>a.iteration-b.iteration);if(loop.iterations.length>30){loop.iterations.shift();loop.clipped=true;}}
   }
 }
