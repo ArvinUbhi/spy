@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 — 2026-11-18
+
+- Add Run Centre progress cards, evidence timelines with historical state reconstruction, correction delivery/activity/review tracking, captured file diffs and concurrent-edit warnings, a request/blocker/stall inbox and run comparisons.
+- Add a local MCP registry, explicit stdio/Streamable HTTP connection controls, protocol negotiation, paginated tool discovery, schema inspection, manual tool calls, results/error/duration receipts and archived console activity. Keep manual calls separate from agent runs.
+- Connect MCP tool requests to saved workflow stages and coordinator prompts; show explicit or inferred MCP provenance on observed agent calls. Preserve runtime permission and configuration boundaries.
+- Add Recovery Centre for archive health, disconnected runs, full exports and browser prompt draft recovery/editing. Add reading preferences, quick keyboard navigation and a searchable, resizable live inspector.
+- Fix restored-version save-state reporting. Bound MCP response/catalog/call memory and omit saved credential values from the catalog. Exclude private MCP registries from ZIPs.
+
+
 ## 0.7.0 — 2026-11-18
 
 - Rebuild Design as Workflow Studio: block/template palette, central canvas, tabbed inspector, focus/expanded editing, readable cards and an export workspace loaded on demand.

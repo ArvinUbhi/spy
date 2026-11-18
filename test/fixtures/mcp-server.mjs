@@ -1,0 +1,3 @@
+import readline from 'node:readline';
+const reply=(id,result)=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id,result})+'\n');
+readline.createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);if(m.method==='initialize')reply(m.id,{protocolVersion:'2025-11-25',capabilities:{tools:{}},serverInfo:{name:'fixture',version:'1'}});if(m.method==='tools/list')reply(m.id,{tools:[{name:'echo',description:'Echo text',inputSchema:{type:'object',required:['text'],properties:{text:{type:'string'}}}},{name:'fail',inputSchema:{type:'object'}}]});if(m.method==='tools/call')reply(m.id,m.params.name==='fail'?{isError:true,content:[{type:'text',text:'Fixture failure'}]}:{content:[{type:'text',text:m.params.arguments.text||''}]});});

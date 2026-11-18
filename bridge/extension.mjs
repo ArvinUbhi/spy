@@ -7,11 +7,11 @@ import { ensureCollector, requestCollector } from './collector.mjs';
 import { createBuffer, projectEvent, metadataEvent } from './core.mjs';
 const endpoint = process.env.SPY_URL || 'http://127.0.0.1:4317';
 if (!['127.0.0.1', 'localhost'].includes(new URL(endpoint).hostname)) throw new Error('Spy bridge accepts loopback destinations only');
-const metadataTypes=['viewer.iteration','viewer.context_handoff','viewer.context_mode','viewer.agent_state','viewer.structure_change'];
+const metadataTypes=['viewer.progress','viewer.iteration','viewer.context_handoff','viewer.context_mode','viewer.agent_state','viewer.structure_change'];
 const session = await joinSpySession([{
   name:'spy_observe',
   description:'Record an explicitly observed context handoff, context-isolation mode, or agent state in the local Spy viewer. Supply real agent IDs and only the payload actually passed. Never infer shared context from delegation or token usage. This records metadata only; it does not control agents.',
-  parameters:{type:'object',required:['type'],properties:{loopId:{type:'string'},iteration:{type:'integer',minimum:1},outcome:{type:'string',enum:['running','passed','failed','cancelled']},progressKey:{type:'string',description:'Stable failure/check fingerprint for detecting repeated outcomes'},type:{type:'string',enum:metadataTypes},agentId:{type:'string'},source:{type:'string'},target:{type:'string'},payload:{type:'string'},summary:{type:'string'},label:{type:'string'},mode:{type:'string',enum:['shared','isolated','unknown']},state:{type:'string',enum:['running','idle','waiting','blocked','completed','failed','cancelled','unknown']},reason:{type:'string'},message:{type:'string'}}},
+  parameters:{type:'object',required:['type'],properties:{objective:{type:'string'},result:{type:'string'},nextStep:{type:'string'},loopId:{type:'string'},iteration:{type:'integer',minimum:1},outcome:{type:'string',enum:['running','passed','failed','cancelled']},progressKey:{type:'string',description:'Stable failure/check fingerprint for detecting repeated outcomes'},type:{type:'string',enum:metadataTypes},agentId:{type:'string'},source:{type:'string'},target:{type:'string'},payload:{type:'string'},summary:{type:'string'},label:{type:'string'},mode:{type:'string',enum:['shared','isolated','unknown']},state:{type:'string',enum:['running','idle','waiting','blocked','completed','failed','cancelled','unknown']},reason:{type:'string'},message:{type:'string'}}},
   handler:async args=>{try{enqueue(metadataEvent(args));return 'Spy queued orchestrator-reported metadata. Runtime state and permissions are unchanged.';}catch(error){return 'Spy rejected metadata: '+error.message;}}
 }]);
 const sessionId = session.sessionId || `bridge-${randomUUID()}`;
@@ -21,7 +21,7 @@ let busy = false, ready = false, connecting = false, lastConnect = 0, lastError 
 async function connect() {
   if (connecting || Date.now()-lastConnect<2000) return;
   connecting=true;lastConnect=Date.now();
-  try { await ensureCollector({endpoint,autoStart:false,requiredFeatures:['skill-events','context-transfers','agent-states','diagnostics','retention','skill-authoring','prompt-control','session-history','automatic-loops','event-archive','agent-workspace','workflow-studio']}); ready=true;lastError=''; } catch(error) { ready=false;if(lastError!==error.message){lastError=error.message;console.error('[Spy] '+error.message);} } finally { connecting=false; }
+  try { await ensureCollector({endpoint,autoStart:false,requiredFeatures:['skill-events','context-transfers','agent-states','diagnostics','retention','skill-authoring','prompt-control','session-history','automatic-loops','event-archive','agent-workspace','workflow-studio','run-centre','mcp-console']}); ready=true;lastError=''; } catch(error) { ready=false;if(lastError!==error.message){lastError=error.message;console.error('[Spy] '+error.message);} } finally { connecting=false; }
 }
 void connect();
 let previousCpu=process.cpuUsage(),previousAt=performance.now(),bridgeMetrics;

@@ -117,6 +117,7 @@ export class Store {
     if(type==='user.message'&&!s.named&&d.content){s.name=clip(d.content).replace(/\s+/g,' ').slice(0,100);s.named=true;}
     if (type === 'assistant.turn_start') { if (id === 'root') a.startedAt = at; a.status = 'running'; a.endedAt = undefined; a.turns++; s.status = 'connected'; }
     if (type === 'assistant.intent') a.activity = clip(d.intent);
+    if(type==='viewer.progress'){if(d.objective)a.task=clip(d.objective);a.progress={objective:clip(d.objective),result:clip(d.result),nextStep:clip(d.nextStep),at};}
     if (type === 'assistant.message_delta') { a.output = ((a.output || '') + (d.deltaContent || '')).slice(-4000); a.activity = 'Streaming response'; }
     if (type === 'assistant.message') { a.output = clip(d.content).slice(0,4000); a.activity = 'Response received'; }
     if (type === 'assistant.usage') { if (d.model) a.model = clip(d.model).slice(0,200); a.tokens += (d.inputTokens || 0) + (d.outputTokens || 0); a.modelMs += d.duration || 0; }
@@ -127,7 +128,7 @@ export class Store {
         if (old) delete a.tools[old.id];
         else { a.droppedTools = (a.droppedTools || 0) + 1; a.activity = 'Tool visibility cap reached (24 active calls)'; return s; }
       }
-      a.tools[d.toolCallId] = { id: d.toolCallId, name: clip(d.toolName || 'Tool').slice(0,200), startedAt: at, status: 'running', args: clip(d.arguments).slice(0,2000) };
+      a.tools[d.toolCallId] = { id: d.toolCallId, name: clip(d.toolName || 'Tool').slice(0,200), startedAt: at, status: 'running', mcpServerName:typeof d.mcpServerName==='string'?d.mcpServerName.slice(0,200):undefined,mcpToolName:typeof d.mcpToolName==='string'?d.mcpToolName.slice(0,200):undefined,args: clip(d.arguments).slice(0,2000) };
       a.activity = 'Running ' + (d.toolName || 'tool');
       if (Object.keys(a.tools).length > RETENTION.toolCount) { const old = Object.values(a.tools).find(t => t.status !== 'running'); if (old) delete a.tools[old.id]; }
     }

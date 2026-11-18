@@ -1,3 +1,4 @@
+import {McpHub} from './mcp.mjs';
 import {DesignLibrary} from './design-library.mjs';
 import {Archive} from './archive.mjs';
 import {Commands} from './commands.mjs';
@@ -5,6 +6,7 @@ import {restoreHistory,saveHistory} from './history.mjs';
 import {homedir} from 'node:os';
 import {VERSION,FEATURES} from './version.mjs';
 import http from 'node:http';
+import {randomUUID} from 'node:crypto';
 import { spawn } from 'node:child_process';
 const portFlag = process.argv.indexOf('--port');
 const defaultPort = Number(process.env.PORT || (portFlag >= 0 ? process.argv[portFlag + 1] : 4317));
@@ -37,6 +39,7 @@ export async function createViewer({ port = defaultPort, production = process.ar
     if(e.type==='subagent.started'&&delegatedPrompts.has(key)){const prompt=delegatedPrompts.get(key);delegatedPrompts.delete(key);void archive.append({...packet,event:{id:'delegated:'+(e.id||d.toolCallId+':'+(e.timestamp||Date.now())),type:'viewer.delegated_prompt',agentId:owner,timestamp:e.timestamp,data:{...prompt,evidence:'Runtime task-tool prompt'}}},owner,session).catch(()=>{});}
     if(e.type==='tool.execution_complete')delegatedPrompts.delete(key);
   };
+  const mcp=new McpHub(historyPath?historyPath+'.mcp.json':null,(type,data)=>{const encoded=JSON.stringify(data.result||'');if(encoded.length>128000){data.result={content:[{type:'text',text:encoded.slice(0,128000)}]};data.truncated=true;}try{store.ingest({sessionId:'spy-mcp-console',name:'MCP console',event:{id:randomUUID(),type,data:{...data,source:'MCP console'}}});changed();}catch(e){console.error('[Spy] MCP activity could not be recorded: '+e.message);}});await mcp.init();
   const commands=new Commands();let historyDirty=false, saving;
   const persist=()=>saving ||= saveHistory(store,historyPath).catch(e=>console.error('[Spy] History save failed: '+e.message)).finally(()=>{saving=null;});
   let dirty = false, stopDemo, closing;
@@ -62,6 +65,9 @@ export async function createViewer({ port = defaultPort, production = process.ar
       }
       if (url.pathname === '/api/health') return json(200, { ok: true, service:'spy',protocol:1,version:VERSION,features:FEATURES,pid:process.pid,sessions:store.sessions.size,viewers:peers.size,retainedStateBytes:store.retainedBytes||0,storage:historyPath?'local-history':'memory' });
       if (url.pathname === '/api/metrics' && req.method==='GET') return json(200,metrics.get());
+      if(url.pathname==='/api/mcp'&&req.method==='GET')return json(200,mcp.view());
+      if(url.pathname==='/api/session'&&req.method==='GET')return json(200,view(url.searchParams.get('session')).sessions.find(s=>s.id===url.searchParams.get('session'))||null);
+      if(url.pathname==='/api/run'&&req.method==='GET'){try{const items=[];let before=url.searchParams.get('before')||Infinity,page;for(let i=0;i<5;i++){page=await archive.page(url.searchParams.get('session'),{before,limit:100});items.push(...page.items);before=page.next;if(!before)break;}return json(200,{items,next:page.next,total:page.total,pruned:page.pruned});}catch(e){return json(500,{error:e.message});}}
       if(url.pathname==='/api/commands'&&req.method==='GET')return json(200,commands.view(url.searchParams.get('session')));
       if(url.pathname==='/api/history'&&req.method==='GET'){
         try{return json(200,await archive.page(url.searchParams.get('session'),{agentId:url.searchParams.get('agent')||undefined,category:url.searchParams.get('category')||'all',q:url.searchParams.get('q')||'',before:url.searchParams.get('before')||Infinity,limit:url.searchParams.get('limit')||50,failures:url.searchParams.get('failures')==='true'}));}catch(e){return json(500,{error:'Could not read history: '+e.message});}
@@ -76,6 +82,19 @@ export async function createViewer({ port = defaultPort, production = process.ar
       if(url.pathname.startsWith('/api/designs/')&&req.method==='GET'){try{return json(200,designs.get(decodeURIComponent(url.pathname.slice('/api/designs/'.length))));}catch(e){return json(e.status||400,{error:e.message});}}
       if (req.method !== 'POST'&&!(['PUT','DELETE'].includes(req.method)&&url.pathname.startsWith('/api/designs/'))) return json(405, { error: 'POST required' });
       if (req.headers['x-agent-viewer'] !== '1') return json(403, { error: 'Bridge header required' });
+      if(url.pathname==='/api/mcp/action'){
+        try{let body='',bytes=0;for await(const chunk of req){bytes+=chunk.length;if(bytes>256000)return json(413,{error:'MCP request exceeds 256 KB'});body+=chunk;}const d=JSON.parse(body);let result;
+          if(d.action==='import')result=await mcp.import(d.config);
+          else if(d.action==='import-copilot'){const config=JSON.parse(await readFile(resolve(homedir(),'.copilot','mcp-config.json'),'utf8'));result=await mcp.import(config);}
+          else if(d.action==='connect')result=await mcp.connect(d.name);
+          else if(d.action==='disconnect'){mcp.disconnect(d.name);result=mcp.view();}
+          else if(d.action==='refresh')result=await mcp.refresh(d.name);
+          else if(d.action==='remove'){await mcp.remove(d.name);result=mcp.view();}
+          else if(d.action==='call'){result=await mcp.call(d.name,d.tool,d.arguments,d.requestId);await archive.flush();}
+          else throw Error('Unknown MCP action');return json(200,result);
+        }catch(e){return json(400,{error:e.message});}
+      }
+      if(url.pathname==='/api/corrections/review'){try{let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>8000)return json(413,{error:'Review too large'});}const d=JSON.parse(body);if(!['confirmed','needs-work','unreviewed'].includes(d.verdict)||typeof d.commandId!=='string'||d.commandId.length>100||typeof d.note!=='string'||d.note.length>2000)throw Error('Invalid correction review');if(!archive.sessions.has(d.sessionId))throw Error('Session not found');const s=store.sessions.get(d.sessionId);const packet={sessionId:d.sessionId,event:{id:randomUUID(),type:'viewer.correction_review',agentId:d.agentId,data:{commandId:d.commandId,verdict:d.verdict,note:d.note}}};await archive.append(packet,d.agentId,s);await archive.flush();return json(200,{ok:true});}catch(e){return json(400,{error:e.message});}}
       if(url.pathname==='/api/designs'||url.pathname.startsWith('/api/designs/')){
         try{let body='',bytes=0;for await(const chunk of req){bytes+=chunk.length;if(bytes>1200000)return json(413,{error:'Design payload exceeds 1.2 MB'});body+=chunk;}const data=JSON.parse(body);if(req.method==='DELETE')return json(200,await designs.remove(decodeURIComponent(url.pathname.slice('/api/designs/'.length)),data.expectedRevision));const d=url.pathname==='/api/designs'?await designs.create(data):await designs.update(decodeURIComponent(url.pathname.slice('/api/designs/'.length)),data);return json(url.pathname==='/api/designs'?201:200,d);}catch(e){return json(e.status||400,{error:e.message});}
       }
@@ -138,9 +157,9 @@ export async function createViewer({ port = defaultPort, production = process.ar
   if (demo) stopDemo = startDemo(store, changed);
 
   const cleanup=setInterval(()=>{if(store.maintain(Date.now(),true))changed();},5000);
-  const close=() => closing ||= (async () => { clearInterval(archiveTimer);clearInterval(historyTimer);await designs.close();await archive.flush().catch(e=>console.error('[Spy] History archive: '+e.message));await saving;await persist();clearInterval(timer); clearInterval(keepalive);clearInterval(resourceTimer);clearInterval(autoTimer);clearInterval(cleanup); stopDemo?.(); for (const peer of peers) peer.end();peers.clear();cache.clear();store.clear();await vite?.close();await new Promise(r=>{server.close(r);server.closeIdleConnections();});})();
+  const close=() => closing ||= (async () => { clearInterval(archiveTimer);clearInterval(historyTimer);mcp.close();await designs.close();await archive.flush().catch(e=>console.error('[Spy] History archive: '+e.message));await saving;await persist();clearInterval(timer); clearInterval(keepalive);clearInterval(resourceTimer);clearInterval(autoTimer);clearInterval(cleanup); stopDemo?.(); for (const peer of peers) peer.end();peers.clear();cache.clear();store.clear();await vite?.close();await new Promise(r=>{server.close(r);server.closeIdleConnections();});})();
   if(process.argv.includes('--auto')) { const bootAt=Date.now();autoTimer=setInterval(()=>{const lastSeen=Math.max(bootAt,...[...store.sessions.values()].map(s=>s.lastSeen));if(!peers.size && Date.now()-lastSeen>120000)void close();},10000); }
-  return {server,store,archive,designs,close};
+  return {server,store,archive,designs,mcp,close};
 }
 if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   const viewer = await createViewer({historyPath:process.env.SPY_HISTORY_PATH||resolve(homedir(),'.copilot','spy','history.json')});
