@@ -12,6 +12,7 @@ export function parseDefinition(raw,fallbackName='',fallbackDescription=''){
 }
 export function buildSkillFiles(design,{plugin=false}={}){
  const d=validateDesign(design);if(!d.nodes.length)throw Error('Add at least one agent before exporting a skill.');if(!d.description.trim())throw Error('Add a trigger description explaining when Copilot should use this skill.');
+ const degree=new Map(d.nodes.map(n=>[n.id,0])),next=new Map(d.nodes.map(n=>[n.id,[]]));for(const e of d.edges)if(e.kind!=='feedback'){degree.set(e.target,degree.get(e.target)+1);next.get(e.source).push(e.target);}const queue=d.nodes.filter(n=>degree.get(n.id)===0).map(n=>n.id);for(let i=0;i<queue.length;i++)for(const target of next.get(queue[i])){degree.set(target,degree.get(target)-1);if(degree.get(target)===0)queue.push(target);}if(queue.length!==d.nodes.length)throw Error('Control-flow cycle: label return connections as feedback so retries are bounded.');
  const definitions=new Map(d.skillDefinitions.map(s=>[s.name,s]));for(const s of definitions.values())if(!s.description.trim()||!s.body.trim())throw Error(`Add a description and instructions for ${s.name}.`);
  const path=plugin?`${d.skillName}/skills/`:'',root=`${path}${d.skillName}`,files=Object.create(null),warnings=[];
  const agents=d.nodes.map((a,i)=>({a,file:`agent-${i+1}.md`}));
