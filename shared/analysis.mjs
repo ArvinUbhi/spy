@@ -47,5 +47,5 @@ export function contextDiagnostics(s){
  return {bytes,count:items.length,issues:issues.slice(0,60),clipped:items.length>=120};
 }
 export function usageRows(s){return (s.agents||[]).flatMap(a=>(a.usage||[]).map(r=>({...r,agentId:a.id,agent:a.name,role:a.role||a.kind,scope:a.id==='root'?'Coordinator':'Delegated'})));}
-export function estimateCost(row,rate){if(!rate||!row.inputReported||!row.outputReported||row.cacheRead||row.cacheWrite)return null;const input=Number(rate.input),output=Number(rate.output);return rate.input!==''&&rate.output!==''&&Number.isFinite(input)&&Number.isFinite(output)&&input>=0&&output>=0?(row.input*input+row.output*output)/1e6:null;}
+export function estimateCost(row,rate){if(!rate||row.incomplete||!row.inputReported||!row.outputReported||row.cacheRead||row.cacheWrite)return null;const input=Number(rate.input),output=Number(rate.output);return rate.input!==''&&rate.output!==''&&Number.isFinite(input)&&Number.isFinite(output)&&input>=0&&output>=0?(row.input*input+row.output*output)/1e6:null;}
 export function analyse(s,now){return {critical:criticalPath(s,now),parallel:parallelism(s,now),loops:loopHealth(s),context:contextDiagnostics(s),usage:usageRows(s)};}

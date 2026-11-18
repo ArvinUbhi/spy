@@ -3,10 +3,10 @@ export function transport(s, packet) {
   s.coverage ||= {missingEvents:0,reorderedEvents:0,attachments:0};
   const {bridgeId,sequence}=packet;
   if(typeof bridgeId!=='string'||bridgeId.length>200||!Number.isSafeInteger(sequence)||sequence<1)return;
-  if(s.coverage.bridgeId!==bridgeId){s.coverage.bridgeId=bridgeId;s.coverage.sequence=0;s.coverage.attachments++;}
+  if(s.coverage.bridgeId!==bridgeId){s.coverage.bridgeId=bridgeId;s.coverage.sequence=0;s.coverage.gaps=[];s.coverage.attachments++;}
   const previous=s.coverage.sequence;
-  if(sequence>previous+1)s.coverage.missingEvents+=sequence-previous-1;
-  if(sequence<previous)s.coverage.reorderedEvents++;
+  if(sequence>previous+1){s.coverage.missingEvents+=sequence-previous-1;s.coverage.gaps.push([previous+1,sequence-1]);s.coverage.gaps=s.coverage.gaps.slice(-64);}
+  if(sequence<previous){s.coverage.reorderedEvents++;const i=s.coverage.gaps.findIndex(([from,to])=>sequence>=from&&sequence<=to);if(i>=0){const [from,to]=s.coverage.gaps[i],replacement=[];if(from<sequence)replacement.push([from,sequence-1]);if(sequence<to)replacement.push([sequence+1,to]);s.coverage.gaps.splice(i,1,...replacement);s.coverage.gaps=s.coverage.gaps.slice(-64);s.coverage.missingEvents--;}}
   s.coverage.sequence=Math.max(previous,sequence);
 }
 export function instrument(s,a,event,at) {
@@ -29,6 +29,7 @@ export function instrument(s,a,event,at) {
     let row=a.usage.find(r=>r.model===model);
     if(!row){if(a.usage.length>=20){a.usageClipped=true;return;}a.usage.push(row={model,input:0,output:0,cacheRead:0,cacheWrite:0,calls:0,ms:0,inputReported:false,outputReported:false});}
     for(const [key,field] of [['input','inputTokens'],['output','outputTokens'],['cacheRead','cacheReadTokens'],['cacheWrite','cacheWriteTokens']])if(Number.isFinite(d[field])&&d[field]>=0){row[key]+=d[field];if(key==='input'||key==='output')row[key+'Reported']=true;}
+    if(!Number.isFinite(d.inputTokens)||!Number.isFinite(d.outputTokens))row.incomplete=(row.incomplete||0)+1;
     row.calls++;row.ms+=Number.isFinite(d.duration)?d.duration:0;
   }
   if(type==='viewer.iteration'&&typeof d.loopId==='string'&&Number.isSafeInteger(d.iteration)&&d.iteration>=1&&['passed','failed','running','cancelled'].includes(d.outcome)){
