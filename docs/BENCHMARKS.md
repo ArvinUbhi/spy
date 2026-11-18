@@ -1,6 +1,6 @@
 # Spy benchmark results
 
-Measured: 2026-11-18T07:53:56.333Z
+Measured: 2026-11-18T08:27:14.169Z
 
 Environment: Node v24.22.3, linux/x64, INTEL(R) XEON(R) PLATINUM 8573C; 9 reported logical CPUs.
 
@@ -8,16 +8,16 @@ Synthetic collector and localhost HTTP-to-SSE overhead; excludes browser paint, 
 
 | Workload | Sessions / workers each | Events/s | Snapshot p95 | Graph layout p95 | Diagnostics p95 | Live payload | Retained heap | Result |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| Single active session | 1 / 8 | 61,095 | 1.545 ms | 0.045 ms | 0.103 ms | 0.21 MiB | 0.876 MiB | PASS |
-| Ten concurrent sessions | 10 / 16 | 131,524 | 7.073 ms | 0.082 ms | 0.361 ms | 0.26 MiB | 3.631 MiB | PASS |
-| Forty concurrent sessions | 40 / 12 | 247,323 | 1.07 ms | 0.021 ms | 0.262 ms | 0.14 MiB | 6.532 MiB | PASS |
-| Skills and context handoffs | 10 / 16 | 136,054 | 6.194 ms | 0.121 ms | 3.319 ms | 0.45 MiB | 4.04 MiB | PASS |
+| Single active session | 1 / 8 | 58,647 | 1.004 ms | 0.041 ms | 0.192 ms | 0.05 MiB | 0.565 MiB | PASS |
+| Ten concurrent sessions | 10 / 16 | 38,469 | 0.71 ms | 0.055 ms | 0.439 ms | 0.11 MiB | 1.609 MiB | PASS |
+| Forty concurrent sessions | 40 / 12 | 55,059 | 0.859 ms | 0.114 ms | 0.353 ms | 0.09 MiB | 4.627 MiB | PASS |
+| Skills and context handoffs | 10 / 16 | 37,080 | 2.037 ms | 0.027 ms | 1.965 ms | 0.30 MiB | 2.08 MiB | PASS |
 
-Local HTTP ingestion → SSE delivery (20 sequential samples): p50 **100.308 ms**, p95 **103.068 ms**, p99 **103.068 ms**. Includes the collector's 100 ms coalescing interval.
+Local HTTP ingestion → SSE delivery (20 sequential samples): p50 **100.128 ms**, p95 **107.367 ms**, p99 **107.367 ms**. Includes the collector's 100 ms coalescing interval.
 
-Fresh idle production collector: **39.8 MiB RSS**, **8.1 MiB JS heap**, **1% CPU** averaged over five one-second samples after warmup. Excludes bridges, browser and Copilot.
+Fresh idle production collector: **39.6 MiB RSS**, **8.1 MiB JS heap**, **0.64% CPU** averaged over five one-second samples after warmup. Excludes bridges, browser and Copilot.
 
-The 40-session workload sends only the selected graph plus summaries, reducing its serialized live payload by **97.28%** compared with streaming every graph.
+The 40-session workload sends only the selected graph plus summaries, reducing its serialized live payload by **97.148%** compared with streaming every graph.
 
 Regression gates: ≥2,000 events/s per workload; snapshot serialization p95 <250 ms; selected-session graph layout p95 <25 ms; diagnostics p95 <50 ms; retained heap growth <256 MiB per workload; localhost delivery p95 <1,000 ms. Gates are intentionally generous for heterogeneous CI runners. Results vary by hardware; synthetic events do not establish live Copilot performance or model quality. Heap growth is measured after explicit GC when available and excludes the frontend/browser. Snapshot timings measure selected-session live projection and JSON serialization; byte measurement is outside the timer.
 

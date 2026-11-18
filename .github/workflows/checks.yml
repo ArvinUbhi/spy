@@ -48,6 +48,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run benchmark
+      - run: npm run test:memory
       - name: Publish benchmark summary
         if: always()
         run: cat reports/BENCHMARKS.md >> "$GITHUB_STEP_SUMMARY"

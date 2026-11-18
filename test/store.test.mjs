@@ -38,7 +38,7 @@ test('feedback edges are explicit, and buffers remain bounded', () => {
   const store = new Store();
   store.ingest(packet('viewer.edge', { source: 'reviewer', target: 'builder', kind: 'feedback', label: 'retry' }), at);
   for (let i = 0; i < 100; i++) store.ingest(packet('assistant.intent', { intent: 'Working' }), at);
-  const s = store.snapshot(at)[0]; assert.equal(s.edges[0].kind, 'feedback'); assert.equal(s.agents[0].events.length, 60);
+  const s = store.snapshot(at)[0]; assert.equal(s.edges[0].kind, 'feedback'); assert.equal(s.agents[0].events.length, 24);
 });
 test('heartbeat does not overwrite an idle session; new turn reactivates it', () => {
   const store = new Store(); store.ingest(packet('session.idle'), at); store.ingest(packet('viewer.heartbeat'), at + 1000);
@@ -86,9 +86,9 @@ test('session, agent, output and active-tool buffers stay bounded under churn', 
   assert.equal(store.snapshot(at).find(s=>s.id==='s').agents.length,160);
   for (let i=0;i<150;i++) store.ingest(packet('tool.execution_start',{ toolCallId:'tool-'+i,toolName:'shell' }),at);
   const root=store.snapshot(at).find(s=>s.id==='s').agents.find(a=>a.id==='root');
-  assert.equal(Object.keys(root.tools).length,120); assert.equal(root.droppedTools,30);
+  assert.equal(Object.keys(root.tools).length,24); assert.equal(root.droppedTools,126);
   for(let i=0;i<20;i++) store.ingest(packet('assistant.message_delta',{deltaContent:'x'.repeat(1000)}),at);
-  assert.equal(root.output.length,10000);
+  assert.equal(root.output.length,4000);
 });
 test('rejects nonfinite metrics and malformed IDs before changing state', () => {
   const store = new Store();

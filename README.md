@@ -25,3 +25,5 @@ Development: `npm ci`, `npm start`. Checks: `npm test`, `npm run benchmark`. Pac
 **Integration status:** automated collector/bridge/startup/browser tests use synthetic events. Real signed-in Copilot CLI validation is still required. Full-context sharing and custom feedback edges need explicit orchestration metadata; arranging the view does not rewrite a running workflow.
 
 Orchestration diagnostics: critical-path highlighting, parallel timing, loop health, context checks, per-model usage and an import/export design canvas. [How it works](docs/DIAGNOSTICS.md).
+
+[Memory cleanup and limits](docs/MEMORY.md) · [Graph-to-skill authoring and exports](docs/SKILL-AUTHORING.md)

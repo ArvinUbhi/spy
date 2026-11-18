@@ -13,10 +13,11 @@ import { startDemo } from './demo.mjs';
 export async function createViewer({ port = defaultPort, production = process.argv.includes('--production'), demo = process.argv.includes('--demo') } = {}) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const store = new Store(), peers = new Set(), metrics=createMetrics(); metrics.sample();
-  let dirty = false, stopDemo;
-  const changed = () => { dirty = true; };
+  let dirty = false, stopDemo, closing;
+  const cache=new Map();const render=sessionId=>{const key=sessionId||'';if(!cache.has(key))cache.set(key,JSON.stringify(store.liveView(sessionId)));return cache.get(key);};
+  const changed = () => {dirty=true;cache.clear();};
   const vite = production ? null : await (await import('vite')).createServer({ root, server: { middlewareMode: true, allowedHosts: true }, appType: 'spa' });
-  const snapshot = res => { if (!res.destroyed) { if (res.writableLength > 2_000_000) return res.destroy(); res.write(`data: ${JSON.stringify(store.liveView(res.spySessionId))}\n\n`); } };
+  const snapshot = res => { if (!res.destroyed&&!res.writableEnded) { if (res.writableLength > 2_000_000) return res.destroy(); res.write(`data: ${render(res.spySessionId)}\n\n`); } };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const json = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
@@ -28,15 +29,17 @@ export async function createViewer({ port = defaultPort, production = process.ar
       const origin = req.headers.origin;
       if (origin) { try { if (new URL(origin).host !== req.headers.host) return json(403, { error: 'Cross-origin request rejected' }); } catch { return json(403, { error: 'Invalid origin' }); } }
       if (url.pathname === '/api/stream' && req.method === 'GET') {
+        if(peers.size>=8)return json(503,{error:'Maximum eight viewer connections'});
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-        res.spySessionId=url.searchParams.get('session'); peers.add(res); snapshot(res); res.write(`event: metrics\ndata: ${JSON.stringify(metrics.get())}\n\n`); req.on('close', () => peers.delete(res)); return;
+        res.spySessionId=url.searchParams.get('session'); peers.add(res); snapshot(res); res.write(`event: metrics\ndata: ${JSON.stringify(metrics.get())}\n\n`); const detach=()=>{peers.delete(res);cache.clear();};res.once('close',detach);res.once('error',()=>{detach();res.destroy();}); return;
       }
-      if (url.pathname === '/api/health') return json(200, { ok: true, service:'spy',protocol:1,version:VERSION,features:FEATURES,pid:process.pid,sessions:store.sessions.size,storage:'memory' });
+      if (url.pathname === '/api/health') return json(200, { ok: true, service:'spy',protocol:1,version:VERSION,features:FEATURES,pid:process.pid,sessions:store.sessions.size,viewers:peers.size,retainedStateBytes:store.retainedBytes||0,storage:'memory' });
       if (url.pathname === '/api/metrics' && req.method==='GET') return json(200,metrics.get());
       if (req.method !== 'POST') return json(405, { error: 'POST required' });
       if (req.headers['x-agent-viewer'] !== '1') return json(403, { error: 'Bridge header required' });
       if (url.pathname === '/api/demo/start') { if (!stopDemo) stopDemo = startDemo(store, changed); return json(200, { ok: true }); }
       if (url.pathname === '/api/demo/stop') { stopDemo?.(); stopDemo = undefined; return json(200, { ok: true }); }
+      if(url.pathname.startsWith('/api/clear/')){let id;try{id=decodeURIComponent(url.pathname.slice('/api/clear/'.length));}catch{return json(400,{error:'Invalid session ID'});}const ok=store.clearDetails(id);changed();return json(ok?200:404,{ok});}
       if (url.pathname !== '/api/events') return json(404, { error: 'Unknown endpoint' });
       try {
         let body = '', bytes = 0;
@@ -57,13 +60,15 @@ export async function createViewer({ port = defaultPort, production = process.ar
       res.setHeader('Content-Type', ({ '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.html': 'text/html' })[extname(path)] || 'application/octet-stream'); res.end(data);
     } catch { res.setHeader('Content-Type', 'text/html'); res.end(await readFile(resolve(root, 'dist/index.html'))); }
   });
-  const timer = setInterval(() => { if (dirty) { dirty = false; for (const peer of peers) snapshot(peer); } }, 100);
+  await new Promise((yes, no) => { server.once('error', no); server.listen(port, '127.0.0.1', yes); }).catch(async error=>{await vite?.close();throw error;});
+  const timer = setInterval(() => { if (dirty) { dirty = false;cache.clear(); for (const peer of peers) snapshot(peer); } }, 100);
   const resourceTimer=setInterval(()=>{const value=metrics.sample();for(const peer of peers)if(!peer.destroyed && peer.writableLength<2_000_000)peer.write(`event: metrics\ndata: ${JSON.stringify(value)}\n\n`);},1000);
   let autoTimer;
-  const keepalive = setInterval(() => { for (const peer of peers) snapshot(peer); }, 10_000);
+  const keepalive = setInterval(() => {cache.clear(); for (const peer of peers) snapshot(peer); }, 10_000);
   if (demo) stopDemo = startDemo(store, changed);
-  await new Promise((yes, no) => { server.once('error', no); server.listen(port, '127.0.0.1', yes); });
-  const close=async () => { clearInterval(timer); clearInterval(keepalive);clearInterval(resourceTimer);clearInterval(autoTimer); stopDemo?.(); for (const peer of peers) peer.end(); await vite?.close(); await new Promise(r => server.close(r)); };
+
+  const cleanup=setInterval(()=>{if(store.maintain(Date.now(),true))changed();},5000);
+  const close=() => closing ||= (async () => { clearInterval(timer); clearInterval(keepalive);clearInterval(resourceTimer);clearInterval(autoTimer);clearInterval(cleanup); stopDemo?.(); for (const peer of peers) peer.end();peers.clear();cache.clear();store.clear();await vite?.close();await new Promise(r=>{server.close(r);server.closeIdleConnections();});})();
   if(process.argv.includes('--auto')) { const bootAt=Date.now();autoTimer=setInterval(()=>{const lastSeen=Math.max(bootAt,...[...store.sessions.values()].map(s=>s.lastSeen));if(!peers.size && Date.now()-lastSeen>120000)void close();},10000); }
   return {server,store,close};
 }

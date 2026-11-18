@@ -13,26 +13,17 @@ export function projectEvent(event, uuid) {
     if(typeof value==='string'&&value.length>6000)data.truncated=true;
     data[key] = typeof value === 'string' ? value.slice(0, 6000) : typeof value === 'object' && value !== null ? JSON.stringify(value).slice(0, 6000) : value;
   }
-  return { id: event.id || uuid(), type: event.type, timestamp: event.timestamp || new Date().toISOString(), agentId: event.agentId, data };
+  return { id: typeof event.id==='string'&&event.id.length<=200?event.id:uuid(), type: event.type, timestamp: event.timestamp || new Date().toISOString(), agentId: event.agentId, data };
 }
-export function createBuffer(limit = 300, maxBatchBytes = 240_000) {
-  let queue = [], dropped = 0;
-  const trim = () => { if (queue.length > limit) { dropped += queue.length - limit; queue = queue.slice(-limit); } };
-  return {
-    get size() { return queue.length; },
-    push(packet) { queue.push(packet); trim(); },
-    retry(batch) { queue = [...batch, ...queue]; trim(); },
-    take() {
-      const batch = []; let bytes = 2;
-      while (queue.length && batch.length < 50) {
-        const nextBytes = new TextEncoder().encode(JSON.stringify(queue[0])).length + 1;
-        if (batch.length && bytes + nextBytes > maxBatchBytes) break;
-        batch.push(queue.shift()); bytes += nextBytes;
-      }
-      return batch;
-    },
-    drainDropped() { const count = dropped; dropped = 0; return count; }
-  };
+export function createBuffer(limit = 128, maxBatchBytes = 240_000, maxQueueBytes = 512_000) {
+ let queue=[],bytes=0,dropped=0;const encoder=new TextEncoder();
+ const entry=packet=>({packet,bytes:encoder.encode(JSON.stringify(packet)).length+1});
+ const trim=()=>{while(queue.length&&(queue.length>limit||bytes>maxQueueBytes)){bytes-=queue.shift().bytes;dropped++;}};
+ return {get size(){return queue.length;},get bytes(){return bytes;},
+ push(packet){const item=entry(packet);if(item.bytes+2>maxBatchBytes||item.bytes>maxQueueBytes){dropped++;return;}queue.push(item);bytes+=item.bytes;trim();},
+ retry(batch){const items=batch.map(entry).filter(item=>{if(item.bytes+2>maxBatchBytes){dropped++;return false;}return true;});queue=[...items,...queue];bytes+=items.reduce((n,i)=>n+i.bytes,0);trim();},
+ take(){const batch=[];let size=2;while(queue.length&&batch.length<50){const item=queue[0];if(size+item.bytes>maxBatchBytes)break;queue.shift();bytes-=item.bytes;size+=item.bytes;batch.push(item.packet);}return batch;},
+ clear(){queue=[];bytes=0;},drainDropped(){const count=dropped;dropped=0;return count;}};
 }
 export function metadataEvent(args) {
   const types=['viewer.iteration','viewer.context_handoff','viewer.context_mode','viewer.agent_state','viewer.structure_change'];

@@ -17,6 +17,7 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run benchmark
+      - run: npm run test:memory
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - run: npm run package
@@ -29,4 +30,4 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --title "Spy $RELEASE_TAG" --generate-notes
           fi
-          gh release upload "$RELEASE_TAG" release/*.zip reports/BENCHMARKS.md reports/benchmark.json reports/junit.xml reports/browser-junit.xml reports/resources.json --clobber
+          gh release upload "$RELEASE_TAG" release/*.zip reports/BENCHMARKS.md reports/benchmark.json reports/junit.xml reports/browser-junit.xml reports/resources.json reports/memory-soak.json --clobber

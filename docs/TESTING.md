@@ -53,3 +53,7 @@ An automated synthetic pass cannot replace this acceptance check against your in
 ## Spy 0.3 diagnostics
 
 54 unit/integration tests cover timing overlap, bounded loops, usage attribution, design validation/drift, sequence gaps and the actual extension module against a synthetic SDK transport. Browser tests cover diagnostic tabs, critical-path highlighting and design import/export. A resource test reports Chromium processes, collector and five bridge processes in `reports/resources.json`; it is not real Copilot acceptance. `npm run doctor` checks prerequisites.
+
+## Spy 0.4 retention and skill exports
+
+65 unit/integration tests and 13 browser/resource tests cover byte-bounded queues, repeated alias IDs, idle/uninspected payload cleanup, SSE limits/teardown, hidden-tab release, manual clear, skill definitions/assignments and both skill/plugin ZIP layouts. `npm run test:memory` exercises 58,752 synthetic events across 12 cleanup rounds and publishes `reports/memory-soak.json`. This tests retention regressions, not every possible leak or real signed-in Copilot execution.

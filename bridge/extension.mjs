@@ -20,7 +20,7 @@ let busy = false, ready = false, connecting = false, lastConnect = 0;
 async function connect() {
   if (connecting || Date.now()-lastConnect<2000) return;
   connecting=true;lastConnect=Date.now();
-  try { await ensureCollector({endpoint,requiredFeatures:['skill-events','context-transfers','agent-states','diagnostics']}); ready=true; } catch(error) { ready=false;console.error('[Spy] '+error.message); } finally { connecting=false; }
+  try { await ensureCollector({endpoint,requiredFeatures:['skill-events','context-transfers','agent-states','diagnostics','retention','skill-authoring']}); ready=true; } catch(error) { ready=false;console.error('[Spy] '+error.message); } finally { connecting=false; }
 }
 void connect();
 let previousCpu=process.cpuUsage(),previousAt=performance.now(),bridgeMetrics;

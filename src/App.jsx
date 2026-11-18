@@ -15,12 +15,18 @@ const post = async path => { const res = await fetch(path, { method: 'POST', hea
 function useStream(sessionId) {
   const [sessions, setSessions] = useState([]), [connected, setConnected] = useState(false), [metrics,setMetrics]=useState(null);
   useEffect(() => {
-    const source = new EventSource('/api/stream'+(sessionId?'?session='+encodeURIComponent(sessionId):''));
-    source.onopen = () => setConnected(true);
-    source.onmessage = e => { try { const message=JSON.parse(e.data);setSessions(Array.isArray(message)?message:message.sessions); } catch { setConnected(false); } };
-    source.addEventListener('metrics',e=>{try{setMetrics(JSON.parse(e.data));}catch{}});
-    source.onerror = () => setConnected(false);
-    return () => source.close();
+    let source,alive=true;
+    const close=()=>{source?.close();source=null;setConnected(false);};
+    const open=()=>{close();setSessions([]);setMetrics(null);if(document.hidden||!alive)return;
+      source=new EventSource('/api/stream'+(sessionId?'?session='+encodeURIComponent(sessionId):''));const current=source;
+      current.onopen=()=>{if(alive&&source===current)setConnected(true);};
+      current.onmessage=e=>{if(!alive||source!==current)return;try{const message=JSON.parse(e.data);setSessions(Array.isArray(message)?message:message.sessions);}catch{setConnected(false);}};
+      current.addEventListener('metrics',e=>{if(alive&&source===current)try{setMetrics(JSON.parse(e.data));}catch{}});
+      current.onerror=()=>{if(alive&&source===current){setConnected(false);setSessions([]);setMetrics(null);}};
+    };
+    const visibility=()=>{if(document.hidden){close();setSessions([]);setMetrics(null);}else open();};
+    open();document.addEventListener('visibilitychange',visibility);
+    return ()=>{alive=false;source?.close();document.removeEventListener('visibilitychange',visibility);};
   }, [sessionId]);
   return [sessions, connected, metrics];
 }
@@ -46,6 +52,7 @@ function Canvas({ session, now, selected, onSelect, onEdgeSelect, slowAfter, fol
   const [positions, setPositions] = useState({});
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const signature = session.agents.map(a => a.id).join('|') + session.edges.map(e => e.id).join('|');
+  useEffect(()=>{const ids=new Set(session.agents.map(a=>a.id));setPositions(p=>Object.keys(p).some(id=>!ids.has(id))?Object.fromEntries(Object.entries(p).filter(([id])=>ids.has(id))):p);},[signature]);
   const layout = useMemo(() => arrange(session), [signature]);
   useEffect(() => { if (follow) { const timer = setTimeout(() => flow.fitView({ padding: .22, duration: 450, maxZoom: 1 }), 100); return () => clearTimeout(timer); } }, [signature, follow]);
   useEffect(() => {
@@ -94,6 +101,7 @@ export default function App() {
   const topologySignature=session?session.agents.map(a=>a.id).sort().join('|')+'::'+session.edges.map(e=>e.id).sort().join('|'):'';
   useEffect(()=>{if(topology.current&&topology.current.id===session?.id&&topology.current.signature!==topologySignature)setDrift(n=>n+1);else if(topology.current?.id!==session?.id)setDrift(0);topology.current={id:session?.id,signature:topologySignature};},[session?.id,topologySignature]);
   const analysis=useMemo(()=>session?analyse(session,now):null,[session,now]);
+  useEffect(()=>{if(selectedEdge&&!session?.edges.some(e=>e.id===selectedEdge.id))setSelectedEdge(null);},[session,selectedEdge]);
   const agent = session?.agents.find(a => a.id === selected);
   const agents = session?.agents || [];
   const active = agents.filter(a=>!a.connectionLost&&running(a)), failed = agents.filter(a => a.status === 'failed');
@@ -109,8 +117,10 @@ export default function App() {
     <div className="page-heading"><div><div className="eyebrow"><span className="status-dot running"/> THE AGENT CONTROL ROOM</div><h1>See the work happen<span>.</span></h1><p>Every agent. Every handoff. One live view.</p></div><button className="secondary-button" onClick={() => setShowConnect(true)}><Terminal size={15}/>Connect session<ArrowUpRight size={15}/></button></div>
     {error && <div className="error-banner">{error}<button onClick={() => setError('')}>Dismiss</button></div>}
     <div className="overview"><div><span><Layers3 size={15}/>Connected sessions</span><strong>{sessions.filter(s => s.status !== 'disconnected').length}<small>{sessions.length ? `${sessions.filter(s=>s.source==='live').length} live · ${sessions.filter(s=>s.source==='demo').length} demo` : 'Waiting for a connection'}</small></strong></div><div><span><Zap size={15}/>Agents running</span><strong className="mint">{active.length}<small>{session ? 'In selected session' : 'Across your session graph'}</small></strong></div><div><span><GitBranch size={15}/>Graph connections</span><strong>{session?.edges.length || 0}<small>{session?.edges.some(e=>e.kind==='feedback') ? 'Feedback loop detected' : 'Delegations & handoffs'}</small></strong></div><div><span><Clock3 size={15}/>Slow tools</span><strong className={slowTools.length ? 'amber' : ''}>{slowTools.length}<small>Running longer than {slowAfter}s</small></strong></div></div>
-    <section className="workbench"><div className="workbench-header"><div><Network size={18}/><h2>{session ? session.name : 'Your live agent graph'}</h2>{session && <span className={`source-badge ${session.source}`}>{session.source === 'demo' ? 'SIMULATED DEMO' : 'LIVE CLI'}</span>}</div><div><button className="tool-button focus-toggle" onClick={() => setFocused(!focused)}><Maximize2 size={14}/>{focused ? 'Exit focus' : 'Focus graph'}</button><label className="state-filter">State<select aria-label="Filter agents by state" value={stateFilter} onChange={e=>{setStateFilter(e.target.value);setSelected(null);setSelectedEdge(null);}}>{['all','running','idle','waiting','blocked','inactive'].map(v=><option key={v} value={v}>{v}</option>)}</select></label><label className="threshold"><Settings2 size={14}/><span>Slow after</span><select value={slowAfter} onChange={e=>setSlowAfter(Number(e.target.value))}>{[10,30,60,120].map(n=><option key={n} value={n}>{n}s</option>)}</select></label></div></div>
+    <section className="workbench"><div className="workbench-header"><div><Network size={18}/><h2>{session ? session.name : 'Your live agent graph'}</h2>{session && <span className={`source-badge ${session.source}`}>{session.source === 'demo' ? 'SIMULATED DEMO' : 'LIVE CLI'}</span>}</div><div><button className="tool-button" disabled={!session} onClick={()=>session&&action('/api/clear/'+encodeURIComponent(session.id))}>Clear details</button><button className="tool-button focus-toggle" onClick={() => setFocused(!focused)}><Maximize2 size={14}/>{focused ? 'Exit focus' : 'Focus graph'}</button><label className="state-filter">State<select aria-label="Filter agents by state" value={stateFilter} onChange={e=>{setStateFilter(e.target.value);setSelected(null);setSelectedEdge(null);}}>{['all','running','idle','waiting','blocked','inactive'].map(v=><option key={v} value={v}>{v}</option>)}</select></label><label className="threshold"><Settings2 size={14}/><span>Slow after</span><select value={slowAfter} onChange={e=>setSlowAfter(Number(e.target.value))}>{[10,30,60,120].map(n=><option key={n} value={n}>{n}s</option>)}</select></label></div></div>
     {session&&drift>0&&<div className="topology-banner">Topology updated {drift} time{drift===1?'':'s'} since this page attached. <button onClick={()=>{setDesignOpen(true);setFocused(false);}}>Compare intended design</button></div>}
+    {!!session?.visibilityDropped&&<div className="disconnected-banner">Agent visibility limit reached; some instances were omitted.</div>}
+    {session?.retention&&<div className="topology-banner">Older detail data cleared: {session.retention.reason}. Showing retained structure and new events only.</div>}
     {session&&<CatalogPanel session={session}/>}
     {!!session?.coverage?.missingEvents&&<div className="disconnected-banner">{session.coverage.missingEvents} unrecovered event sequence gaps; this graph may be incomplete.</div>}
     {session?.status === 'disconnected' && <div className="disconnected-banner">Session heartbeat lost. Node states are stale until the bridge reconnects.</div>}
@@ -119,5 +129,5 @@ export default function App() {
     {designOpen&&<DesignPanel session={session} design={design} setDesign={setDesign}/>}
     <Diagnostics session={session} analysis={analysis} critical={critical} setCritical={setCritical} drift={drift} onSelect={id=>{setSelected(id);setSelectedEdge(null);}}/>
     <section className="activity-strip"><div className="strip-title"><div><Activity size={16}/><h2>Happening now</h2><span>{activeTools.length}</span></div><small>{session?.source === 'demo' ? 'Synthetic events · not your Copilot activity' : 'Observed tool executions'}</small></div>{activeTools.length ? <div className="tool-rows">{activeTools.slice(0,4).map(t=><button className="live-tool-row" key={t.id} onClick={()=>setSelected(t.agentId)}><span className="terminal-icon"><Terminal size={14}/></span><strong>{t.agent}</strong><span>{t.name}</span><div className="time-track"><i style={{width: `${Math.min(100, (now-t.startedAt)/(slowAfter*10))}%`}}/></div><time className={now-t.startedAt>slowAfter*1000 ? 'amber' : ''}>{duration(now-t.startedAt)}</time><ArrowUpRight size={14}/></button>)}</div> : <div className="quiet-strip"><span className="status-dot idle"/>{session ? 'No tools executing right now. Listening for the next event.' : 'Connect a session or run the demo to see live activity.'}</div>}</section>
-    <div className="resource-strip" title="Collector CPU is percentage of one logical core. RSS is physical process memory. Copilot and browser usage are excluded. Bridge metrics refresh every five seconds."><span><Activity size={12}/> Spy collector <b>{metrics ? metrics.cpuPercent.toFixed(1)+'% CPU' : 'Measuring…'}</b><i>·</i><b>{metrics ? metrics.rssMiB.toFixed(1)+' MB RSS' : '—'}</b><i>·</i>{metrics?.eventsPerSecond ?? 0} events/s</span><span title="Sum of reported active bridge processes. Shared resident pages can be counted more than once.">Bridges ({bridges.length}) <b>{bridges.length ? bridgeCpu.toFixed(1)+'% CPU · '+bridgeRss.toFixed(1)+' MB summed RSS' : 'Not reported'}</b></span></div><footer className="page-footer"><span><span className="status-dot running"/> Built for the moment. No session history retained.</span><span>SPY <i>/</i> 0.3</span></footer></main>{showConnect && <ConnectModal onClose={()=>setShowConnect(false)}/>}</div>;
+    <div className="resource-strip" title="Collector CPU is percentage of one logical core. RSS is physical process memory. Copilot and browser usage are excluded. Bridge metrics refresh every five seconds."><span><Activity size={12}/> Spy collector <b>{metrics ? metrics.cpuPercent.toFixed(1)+'% CPU' : 'Measuring…'}</b><i>·</i><b>{metrics ? metrics.rssMiB.toFixed(1)+' MB RSS' : '—'}</b><i>·</i>{metrics?.eventsPerSecond ?? 0} events/s</span><span title="Sum of reported active bridge processes. Shared resident pages can be counted more than once.">Bridges ({bridges.length}) <b>{bridges.length ? bridgeCpu.toFixed(1)+'% CPU · '+bridgeRss.toFixed(1)+' MB summed RSS' : 'Not reported'}</b></span></div><footer className="page-footer"><span><span className="status-dot running"/> Built for the moment. No session history retained.</span><span>SPY <i>/</i> 0.4</span></footer></main>{showConnect && <ConnectModal onClose={()=>setShowConnect(false)}/>}</div>;
 }

@@ -1,0 +1,24 @@
+{
+  "measuredAt": "2026-11-18T08:27:13.790Z",
+  "rounds": 12,
+  "events": 58752,
+  "heapMiBAfterCleanup": [
+    7.03875732421875,
+    7.116630554199219,
+    7.1158599853515625,
+    7.04046630859375,
+    7.1199951171875,
+    7.1125335693359375,
+    7.043769836425781,
+    7.124298095703125,
+    7.1160430908203125,
+    7.126708984375,
+    7.049324035644531,
+    7.1183929443359375
+  ],
+  "settledHeapRangeMiB": 0.08624267578125,
+  "peakSerializedStateMiB": 10.811798095703125,
+  "sessionsAfterCleanup": 0,
+  "passed": true,
+  "scope": "Synthetic churn, bounded payload retention and forced-GC cleanup; does not prove absence of every leak. RSS is not expected to drop immediately after GC."
+}

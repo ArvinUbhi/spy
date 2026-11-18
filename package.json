@@ -1,6 +1,6 @@
 {
   "name": "copilot-spy",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,7 +17,8 @@
     "verify:zip": "node scripts/verify-zip.mjs",
     "benchmark": "node --expose-gc scripts/benchmark.mjs",
     "test:e2e": "playwright test",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "test:memory": "node --expose-gc scripts/memory-soak.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.10.0",

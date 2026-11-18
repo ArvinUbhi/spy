@@ -19,7 +19,7 @@ test('batch payloads stay within collector limits for multi-byte output', () => 
   for (let i = 0; i < 100; i++) buffer.push({ i, output: '漢'.repeat(6000) });
   let count = 0;
   while (buffer.size) { const batch = buffer.take(); count += batch.length; assert.ok(Buffer.byteLength(JSON.stringify(batch)) < 512000); }
-  assert.equal(count, 100);
+  assert.equal(count+buffer.drainDropped(), 100);assert.equal(buffer.bytes,0);
 });
 test('custom context metadata rejects missing participants and invalid states',async()=>{
  const {metadataEvent}=await import('../bridge/core.mjs');
