@@ -29,7 +29,13 @@ try {
   });
   const page = await (await fetch(base)).text(); assert.match(page, /Spy/);
   const asset = page.match(/src="([^"]+\.js)"/)[1];
-  assert.equal((await fetch(base + asset)).status, 200);
+  const module = await fetch(base + asset);
+  assert.equal(module.status, 200);
+  assert.match(module.headers.get('content-type'), /(?:text|application)\/javascript/);
+  assert.equal(await module.text(), await readFile(resolve(app, 'dist', '.' + asset), 'utf8'));
+  const css = page.match(/href="([^"]+\.css)"/)[1];
+  const style = await fetch(base + css); assert.equal(style.status, 200); assert.match(style.headers.get('content-type'), /text\/css/);
+  const missing = await fetch(base + '/assets/missing.js'); assert.equal(missing.status, 404); assert.doesNotMatch(await missing.text(), /<!doctype/i);
   assert.equal((await (await fetch(base + '/api/health')).json()).storage, 'memory');
   const probe=http.createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const launchPort=probe.address().port;await new Promise(r=>probe.close(r));
   const launch=spawnSync(process.execPath,['scripts/launch.mjs','--no-open','--port',String(launchPort)],{cwd:app,env:{...process.env,SPY_EXTENSION_DIR:extension},encoding:'utf8',timeout:15000});

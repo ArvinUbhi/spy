@@ -23,3 +23,21 @@ test('health identifies Spy and resource endpoint reports process CPU/RSS',async
   const viewer=await createViewer({port:0,production:true,demo:false});const base=`http://127.0.0.1:${viewer.server.address().port}`;
   try{const health=await(await fetch(base+'/api/health')).json();assert.equal(health.service,'spy');assert.equal(health.protocol,1);const metrics=await(await fetch(base+'/api/metrics')).json();assert.ok(metrics.rssMiB>0);assert.ok(metrics.cpuPercent>=0);assert.equal(metrics.pid,process.pid);}finally{await viewer.close();}
 });
+test('production serves actual JavaScript and CSS and never substitutes HTML for missing modules',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const viewer=await createViewer({port:0,production:true});const base=`http://127.0.0.1:${viewer.server.address().port}`;
+  try {
+    const page=await(await fetch(base)).text();
+    for(const [pattern,mime] of [[/src="([^"]+\.js)"/,/javascript/],[/href="([^"]+\.css)"/,/text\/css/]]) {
+      const asset=page.match(pattern)[1],response=await fetch(base+asset);
+      assert.equal(response.status,200);assert.match(response.headers.get('content-type'),mime);
+      assert.equal(response.headers.get('x-content-type-options'),'nosniff');
+      assert.equal(await response.text(),await readFile(new URL('../dist'+asset,import.meta.url),'utf8'));
+    }
+    for(const asset of ['/assets/old-build.js','/missing.mjs','/assets/missing.wasm']) {
+      const response=await fetch(base+asset);assert.equal(response.status,404);assert.doesNotMatch(await response.text(),/<!doctype/i);
+    }
+    assert.equal((await fetch(base+'/%ZZ')).status,400);
+    assert.equal((await fetch(base+'/%2e%2e%2fpackage.json')).status,403);
+  }finally{await viewer.close();}
+});

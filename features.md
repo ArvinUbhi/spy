@@ -35,3 +35,9 @@ Spy is a local React dashboard for observing and designing GitHub Copilot CLI or
 
 - Byte-bounded delivery queues, independent cleanup, idle/uninspected payload expiry, stale-state handling and explicit clearing. Hidden tabs release live snapshots. See [memory limits](docs/MEMORY.md).
 - Define reusable skills, assign required/recommended skills per agent, edit role/workflow instructions and preview generated SKILL.md files. Export installable skill folders or a standard marketplace plugin directory. See [skill authoring](docs/SKILL-AUTHORING.md).
+
+## v0.4.1
+
+- Fixed Windows JavaScript/CSS serving in extracted ZIPs.
+- Missing assets return a clear 404 instead of HTML; startup replaces collectors lacking the fix.
+- ZIP checks verify JavaScript contents and MIME types on Windows, macOS and Linux.

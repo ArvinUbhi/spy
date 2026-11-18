@@ -5,7 +5,7 @@ const portFlag = process.argv.indexOf('--port');
 const defaultPort = Number(process.env.PORT || (portFlag >= 0 ? process.argv[portFlag + 1] : 4317));
 import { readFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
-import { resolve, extname, dirname } from 'node:path';
+import { resolve, extname, dirname, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMetrics } from './metrics.mjs';
 import { Store } from './store.mjs';
@@ -53,12 +53,24 @@ export async function createViewer({ port = defaultPort, production = process.ar
       return;
     }
     if (vite) return vite.middlewares(req, res);
+    // Use native path operations: Windows uses backslashes, including after dist.
+    const dist = resolve(root, 'dist');
+    let path;
     try {
-      const path = resolve(root, 'dist', '.' + decodeURIComponent(url.pathname));
-      if (!path.startsWith(resolve(root, 'dist') + '/')) throw Error('fallback');
+      path = resolve(dist, '.' + decodeURIComponent(url.pathname));
+      const inside = relative(dist, path);
+      if (isAbsolute(inside) || inside === '..' || inside.startsWith('../') || inside.startsWith('..\\')) return json(403, { error: 'Invalid asset path' });
+    } catch { return json(400, { error: 'Invalid asset URL' }); }
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    try {
       const data = await readFile(path);
-      res.setHeader('Content-Type', ({ '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.html': 'text/html' })[extname(path)] || 'application/octet-stream'); res.end(data);
-    } catch { res.setHeader('Content-Type', 'text/html'); res.end(await readFile(resolve(root, 'dist/index.html'))); }
+      res.setHeader('Content-Type', ({ '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.css': 'text/css', '.svg': 'image/svg+xml', '.html': 'text/html' })[extname(path)] || 'application/octet-stream'); res.end(data);
+    } catch {
+      // Missing module/assets must never masquerade as a successful HTML response.
+      if (url.pathname.startsWith('/assets/') || extname(url.pathname)) return json(404, { error: 'Asset not found. Restart Spy and reload the page.' });
+      res.setHeader('Content-Type', 'text/html'); res.end(await readFile(resolve(dist, 'index.html')));
+    }
   });
   await new Promise((yes, no) => { server.once('error', no); server.listen(port, '127.0.0.1', yes); }).catch(async error=>{await vite?.close();throw error;});
   const timer = setInterval(() => { if (dirty) { dirty = false;cache.clear(); for (const peer of peers) snapshot(peer); } }, 100);
