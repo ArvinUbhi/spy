@@ -1,5 +1,5 @@
 const terminal=s=>['completed','failed','cancelled'].includes(s);
-const endOf=(a,s,now)=>a.connectionLost||s.status==='disconnected'?Math.min(now,s.lastSeen||a.lastActivity):now;
+const endOf=(a,s,now)=>a.stale?Math.min(now,Math.max(a.lastActivity,a.runtimeConfirmedAt||0)):a.connectionLost||s.status==='disconnected'?Math.min(now,s.lastSeen||a.lastActivity):now;
 export function stateTimes(a,s,now){const result={...(a.stateMs||{})};if(a.stateSince!==undefined){const end=Math.min(endOf(a,s,now),a.endedAt||Infinity);result[a.observedState]=(result[a.observedState]||0)+Math.max(0,end-a.stateSince);}return result;}
 export function criticalPath(s,now=Date.now()){
   // Delegation is nested wall time, not sequential dependency. Context transfers
@@ -31,7 +31,11 @@ export function parallelism(s,now=Date.now()){
 export function loopHealth(s){
  const explicit=(s.loops||[]).map(l=>{const done=l.iterations.filter(i=>i.outcome!=='running'),tail=done.slice(-3);const repeating=tail.length===3&&tail.every(i=>i.outcome==='failed'&&i.progressKey&&i.progressKey===tail[0].progressKey);return {...l,repeating,failures:done.filter(i=>i.outcome==='failed').length,latest:l.iterations.at(-1),durations:done.map(i=>({iteration:i.iteration,ms:i.start===null?null:Math.max(0,i.at-i.start)})),evidence:'orchestrator'};});
  const feedback=(s.edges||[]).filter(e=>e.kind==='feedback').map(e=>({id:e.id,source:e.source,target:e.target,traversals:e.traversals||1,evidence:'control metadata'}));
- return {explicit,feedback};
+ const suspected=[];
+ for(const a of s.agents||[]){const attempts=a.attempts||[];
+   for(let width=1;width<=4;width++){if(attempts.length<width*3)continue;const tail=attempts.slice(-width*3);const pattern=tail.slice(-width).map(t=>t.key);if(tail.every((t,i)=>t.key===pattern[i%width])){suspected.push({id:'repeat:'+a.id,agentId:a.id,agent:a.name,pattern:tail.slice(-width).map(t=>t.name).join(' → '),repeats:3,failures:tail.filter(t=>t.outcome==='failed').length,lastAt:tail.at(-1).at,evidence:'Repeated tool names and arguments (heuristic)'});break;}}
+ }
+ return {explicit,feedback,suspected};
 }
 export function contextDiagnostics(s){
  const items=s.contexts||[],seen=new Map(),issues=[];let bytes=0;

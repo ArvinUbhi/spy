@@ -1,7 +1,7 @@
 import {RETENTION,maintain,compactMaps,budgetSession,trimDetails} from './retention.mjs';
 import { transport, instrument } from './diagnostics.mjs';
 import { observe, recordContext, delegatedPrompt } from './observability.mjs';
-// Volatile current-session projection. No database, log file, or browser storage.
+// Bounded session projection; the server can persist a local history snapshot.
 const MAX_SESSIONS = 40, MAX_AGENTS = 160, MAX_EVENTS = RETENTION.eventCount;
 const terminal = s => ['completed', 'failed', 'cancelled'].includes(s);
 const clip = value => (typeof value === 'string' ? value : JSON.stringify(value ?? '')).slice(0, 6000);
@@ -12,7 +12,7 @@ export class Store {
     const event = packet.event;
     if (!event || typeof event.type !== 'string' || event.type.length > 100 || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) throw new Error('event.type and event.data required');
     for(const value of [event.id,event.timestamp])if(value!==undefined&&(typeof value!=='string'||value.length>200))throw Error('Invalid event identifier or timestamp');
-    for (const id of [event.data.parentAgentId,event.data.parentId,event.agentId, event.data.toolCallId, event.data.agentId, event.data.source, event.data.target, event.data.requestId, event.data.ownerAgentId]) if (id !== undefined && (typeof id !== 'string' || id.length > 200)) throw new Error('Invalid instance identifier');
+    for (const id of [event.data.parentAgentId,event.data.parentId,event.agentId, event.data.toolCallId, event.data.agentId, event.data.source, event.data.target, event.data.requestId, event.data.ownerAgentId,event.data.runtimeTaskId]) if (id !== undefined && (typeof id !== 'string' || id.length > 200)) throw new Error('Invalid instance identifier');
     for (const key of ['inputTokens', 'outputTokens', 'totalTokens', 'duration', 'durationMs', 'cacheReadTokens', 'cacheWriteTokens']) if (event.data[key] !== undefined && (!Number.isFinite(event.data[key]) || event.data[key] < 0)) throw new Error('Invalid metric: ' + key);
     if(event.type==='tool.execution_start'&&typeof event.data.toolCallId!=='string')throw Error('Tool start requires toolCallId');
     let s = this.sessions.get(packet.sessionId);
@@ -22,7 +22,7 @@ export class Store {
       this.sessions.set(s.id, s);
     }
     transport(s,packet);
-    s.lastSeen = now;
+    s.lastSeen = now; s.restored=false;
     if(packet.bridgeMetrics && ['rssMiB','cpuPercent'].every(k=>Number.isFinite(packet.bridgeMetrics[k]) && packet.bridgeMetrics[k]>=0)) s.bridgeMetrics={rssMiB:packet.bridgeMetrics.rssMiB,cpuPercent:packet.bridgeMetrics.cpuPercent};
     if (event.id && s.seen.has(event.id)) return s;
     if (event.id) { s.seen.add(event.id); if (s.seen.size > RETENTION.dedupe) s.seen.delete(s.seen.values().next().value); }
@@ -49,11 +49,13 @@ export class Store {
     const root = agent('root');
     if (type === 'viewer.heartbeat') { if (s.status === 'disconnected') s.status = 'connected'; return s; }
     if (type === 'viewer.disconnect' || type === 'session.shutdown') { s.status = 'disconnected'; return s; }
-    if (type === 'viewer.metadata') { if (d.name) s.name = clip(d.name); return s; }
+    if (type === 'viewer.metadata') { if (d.title || (!s.named && d.name)) s.name = clip(d.title || d.name); if(d.title)s.named=true; if(d.capabilities)s.capabilities=d.capabilities; return s; }
+    if(type==='viewer.task_state'&&d.toolCallId&&s.aliases[d.toolCallId]){s.aliases[d.agentId]=s.aliases[d.toolCallId];}
     const requestedOwner=s.pendingRequests[d.requestId] || d.ownerAgentId;
-    const origin=requestedOwner?(s.aliases[requestedOwner]||requestedOwner):event.agentId?(s.aliases[event.agentId]||event.agentId):'root';
+    const origin=requestedOwner?(s.aliases[requestedOwner]||requestedOwner):(event.agentId||d.agentId)?(s.aliases[event.agentId||d.agentId]||event.agentId||d.agentId):'root';
     if (type === 'tool.execution_start' && d.toolCallId) { s.calls[d.toolCallId] = origin; if (Object.keys(s.calls).length > 320) delete s.calls[Object.keys(s.calls)[0]]; }
     let id = origin;
+    if(type.startsWith('subagent.')&&!d.toolCallId){const known=Object.entries(s.aliases).find(([key,value])=>value===(s.aliases[d.agentId||event.agentId]||d.agentId||event.agentId)&&key!==(d.agentId||event.agentId));if(known)d.toolCallId=known[0];}
     if (type.startsWith('subagent.') && d.toolCallId) {
       const caller = s.calls[d.toolCallId];
       const childInstance = d.agentId || (event.agentId && event.agentId !== caller ? event.agentId : null);
@@ -68,6 +70,7 @@ export class Store {
       if (d.agentDisplayName) a.name = clip(d.agentDisplayName).slice(0,200);
       if (d.agentDescription) a.task = clip(d.agentDescription).slice(0,2000);
       if (d.model) a.model = clip(d.model).slice(0,200);
+      if(d.executionMode)a.executionMode=d.executionMode;
       if (type === 'subagent.started') {
         a.startedAt = at; delete a.endedAt; delete a.durationMs; a.status = 'running'; a.activity = a.task || 'Starting delegated task';
         const parent = s.calls[d.toolCallId] || d.parentAgentId || d.parentId || (event.agentId && event.agentId !== id ? origin : null);
@@ -89,10 +92,22 @@ export class Store {
     }
     const a = agent(id);
     if (!a) return s;
+    if(type==='viewer.task_state'){
+      a.runtimeConfirmedAt=at;
+      if(a.runtimeTaskId===d.runtimeTaskId&&a.status===d.state&&(!d.name||a.name===d.name)&&(!d.model||a.model===d.model)&&a.stateEvidence==='Runtime task registry')return s;
+    }
     a.lastActivity = at;
+    if(['subagent.completed','subagent.failed'].includes(type)&&!d.toolCallId){a.status=type==='subagent.failed'?'failed':d.cancelled?'cancelled':'completed';a.endedAt=at;a.activity=d.error||'Task complete';}
+    if(type==='viewer.task_state'){
+      if(d.runtimeTaskId)a.runtimeTaskId=d.runtimeTaskId;
+      if(d.name)a.name=clip(d.name).slice(0,200);
+      if(d.model)a.model=clip(d.model).slice(0,200);
+      if(['running','idle','completed','failed','cancelled'].includes(d.state)){a.status=d.state;a.stateEvidence='Runtime task registry';a.activity=d.reason||d.state;if(terminal(a.status)||a.status==='idle')a.endedAt=at;else delete a.endedAt;}
+    }
     if (type === 'subagent.configured') { if (d.model) a.model = clip(d.model).slice(0,200); a.reasoningEffort = clip(d.reasoningEffort).slice(0,100); }
     if (type === 'session.start' && d.selectedModel) root.model = clip(d.selectedModel).slice(0,200);
-    if (type === 'session.title_changed' && d.title) s.name = clip(d.title);
+    if (type === 'session.title_changed' && (d.title||d.name)) {s.name = clip(d.title||d.name);s.named=true;}
+    if(type==='user.message'&&!s.named&&d.content){s.name=clip(d.content).replace(/\s+/g,' ').slice(0,100);s.named=true;}
     if (type === 'assistant.turn_start') { if (id === 'root') a.startedAt = at; a.status = 'running'; a.endedAt = undefined; a.turns++; s.status = 'connected'; }
     if (type === 'assistant.intent') a.activity = clip(d.intent);
     if (type === 'assistant.message_delta') { a.output = ((a.output || '') + (d.deltaContent || '')).slice(-4000); a.activity = 'Streaming response'; }
@@ -120,6 +135,7 @@ export class Store {
       if (t) { t.endedAt = at; t.status = d.success === false ? 'failed' : 'completed'; t.result = clip(d.result ?? d.error).slice(0,4000); }
       const child=s.agents[s.aliases[d.toolCallId]];
       if(child && child.id!==owner.id && child.parentId===owner.id && d.result!==undefined)recordContext(s,{id:`result:${d.toolCallId}`,source:child.id,target:owner.id,kind:'result',label:'Returned result',payload:d.result,evidence:'runtime',scope:'Returned tool result only'},at);
+      if(child && !terminal(child.status) && child.executionMode!=='background' && !child.runtimeTaskId){child.status=d.success===false?'failed':'completed';child.endedAt=at;child.activity='Delegating tool returned';child.stateEvidence='Synchronous delegation returned';observe(s,child,{type:'viewer.reconciled',data:{}},at);instrument(s,child,{type:'viewer.reconciled',data:{}},at);}
       delete s.calls[d.toolCallId];
       owner.activity = 'Tool finished';
     }
@@ -138,10 +154,12 @@ export class Store {
       if(agent(source)&&agent(target)){recordContext(s,{...d,id:d.id||event.id,source,target,evidence:'orchestrator'},at);const edgeId='context:'+source+':'+target;
         if(!s.edges.some(e=>e.id===edgeId))s.edges.push({id:edgeId,source,target,kind:'context',label:'Context handoff',inferred:false});s.edges=s.edges.slice(-400);}
     }
+    if(terminal(a.status))for(const t of Object.values(a.tools))if(t.status==='running'){t.status='unknown';t.endedAt=at;}
     observe(s,a,event,at);
     instrument(s,a,event,at);
     if (type === 'viewer.structure_change') { s.notices.unshift({ at, message: clip(d.message) }); s.notices = s.notices.slice(0, 12); }
     if (!['assistant.message_delta', 'assistant.reasoning_delta', 'assistant.reasoning'].includes(type)) {
+      a.eventTotal=(a.eventTotal||a.events.length)+1;
       a.events.unshift({ at, type, text: clip((type==='skill.invoked'?d.name:null) || d.intent || d.content || d.error || d.toolName || d.agentDisplayName || d.model || d.name || d.reason || type).slice(0,1200) });
       a.events = a.events.slice(0, MAX_EVENTS);
     }
@@ -153,14 +171,14 @@ export class Store {
   clear(){this.sessions.clear();this.retainedBytes=0;}
   snapshot(now = Date.now()) {
     this.maintain(now);
-    return [...this.sessions.values()].map(({ aliases, calls, pendingRequests, seen, ...s }) => { const status=now-s.lastSeen>35_000?'disconnected':s.status;return {...s,status,agents:Object.values(s.agents).map(a=>status==='disconnected'?{...a,connectionLost:true}:a)}; });
+    return [...this.sessions.values()].map(({ aliases, calls, pendingRequests, seen, ...s }) => { const status=s.restored||now-s.lastSeen>35_000?'disconnected':s.status;return {...s,status,agents:Object.values(s.agents).map(a=>status==='disconnected'?{...a,connectionLost:true}:a.status==='running'&&now-Math.max(a.lastActivity,a.runtimeConfirmedAt||0)>120000?{...a,status:'unknown',stale:true,reportedStatus:a.status,stateEvidence:'No agent activity for two minutes; runtime state unconfirmed',activity:'Activity stale · awaiting runtime confirmation',tools:Object.fromEntries(Object.entries(a.tools).map(([id,t])=>[id,t.status==='running'?{...t,status:'unknown'}:t]))}:a)}; });
   }
   liveView(selectedId,now=Date.now()) {
     const all=this.snapshot(now);
     const selected=all.find(s=>s.id===selectedId) || all.find(s=>s.source==='live' && s.status!=='disconnected') || all[0];
     if(selected){const live=this.sessions.get(selected.id);if(live)live.lastInspectedAt=now;}
     return {selectedSessionId:selected?.id || null,sessions:all.map(s=>{
-      const summary={id:s.id,name:s.name,cwd:s.cwd,source:s.source,status:s.status,startedAt:s.startedAt,lastSeen:s.lastSeen,runningCount:s.status==='disconnected'?0:s.agents.filter(a=>a.status==='running').length,waitingCount:s.status==='disconnected'?0:s.agents.filter(a=>a.status==='waiting'||a.status==='blocked').length,nodeCount:s.agents.length,bridgeMetrics:s.bridgeMetrics};
+      const summary={id:s.id,name:s.name,cwd:s.cwd,source:s.source,status:s.status,startedAt:s.startedAt,lastSeen:s.lastSeen,runningCount:s.status==='disconnected'?0:s.agents.filter(a=>a.status==='running').length,waitingCount:s.status==='disconnected'?0:s.agents.filter(a=>a.status==='waiting'||a.status==='blocked').length,nodeCount:s.agents.length,bridgeMetrics:s.bridgeMetrics,capabilities:s.capabilities};
       return s.id===selected?.id?{...s,...summary}:{...summary,agents:[],edges:[],contexts:[],timeline:[],loops:[],skillCatalog:[],agentCatalog:[],notices:[]};
     })};
   }

@@ -8,6 +8,6 @@ export function arrange(session) {
   const groups = {};
   for (const a of agents) (groups[levels[a.id]] ||= []).push(a.id);
   const positions = {};
-  for (const [level, ids] of Object.entries(groups)) ids.forEach((id, i) => { positions[id] = { x: 440 + (i - (ids.length - 1) / 2) * 320, y: 30 + Number(level) * 230 }; });
+  for (const [level, ids] of Object.entries(groups)) ids.forEach((id, i) => { positions[id] = { x: 440 + (i - (ids.length - 1) / 2) * 320, y: 30 + Number(level) * 275 }; });
   return positions;
 }

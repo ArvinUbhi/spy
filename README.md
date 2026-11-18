@@ -14,7 +14,7 @@ A live React graph for your **GitHub Copilot CLI** agents. See delegations, skil
 
 Keep the command window open while using Spy. Startup stops the previous Spy collector on its port; all Copilot sessions share the new viewer. Open **http://127.0.0.1:4317** whenever you want the view. Try **Run demo** without a CLI session.
 
-Spy keeps current state in memory only. Press **Ctrl+C**, close the command window, or run **`stop.cmd`** / **`sh stop.sh`** to stop it. Run the new launcher to update; reload existing Copilot extensions after upgrading. Existing sessions need the extension loaded once; they cannot be discovered retrospectively.
+Spy keeps a bounded local history snapshot at `~/.copilot/spy/history.json`, including visible prompts, tool arguments and outputs. Sessions expire after seven days without bridge contact; byte limits may trim older details sooner. History survives tab changes, reconnects and collector restarts. Set `SPY_HISTORY_PATH` to choose a different file. Press **Ctrl+C**, close the command window, or run **`stop.cmd`** / **`sh stop.sh`** to stop it. Run the new launcher to update; reload existing Copilot extensions after upgrading. Existing sessions need the extension loaded once; they cannot be discovered retrospectively.
 
 ## More
 
@@ -27,3 +27,13 @@ Development: `npm ci`, `npm start`. Checks: `npm test`, `npm run benchmark`. Pac
 Orchestration diagnostics: critical-path highlighting, parallel timing, loop health, context checks, per-model usage and an import/export design canvas. [How it works](docs/DIAGNOSTICS.md).
 
 [Memory cleanup and limits](docs/MEMORY.md) · [Graph-to-skill authoring and exports](docs/SKILL-AUTHORING.md)
+
+## Control room (v0.5.0)
+
+Use **Live sessions** to watch work and inspect agents. **Design builder** is a separate page for workflow authoring; **Stats** contains tool-call/failure counters, model usage, timing, parallelism and loop evidence. Text and controls are larger, including on phones.
+
+Select an agent to **Send prompt**. The coordinator uses the host's `session.send` steering API; identified live/idle subagent tasks use `session.rpc.tasks.sendMessage`. The UI distinguishes queued, sending, delivered and failed requests. Unsupported older hosts, offline sessions and finished tasks are disabled. Delivered means accepted by the runtime, not that the model has acted on it. Prompts are never retried automatically after dispatch.
+
+Spy polls the runtime's optional task registry and session metadata every five seconds to reconcile lifecycle state and names, alongside native events. Old hosts fall back to events and the first observed user prompt. After two minutes without agent activity, unconfirmed running state is shown as unknown; this does not claim the task stopped. Exact repeated tool arguments and short repeated tool sequences flag possible loops automatically; intentional polling can also trigger these alerts.
+
+After upgrading, run the new startup script and **reload Spy in existing Copilot sessions** to activate task reconciliation and prompt delivery. Earlier missing history cannot be reconstructed.

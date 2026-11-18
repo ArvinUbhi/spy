@@ -9,5 +9,5 @@ test('feedback loops do not distort layout or create infinite recursion',()=>{
   const withFeedback={...session,edges:[...session.edges,{source:'tester',target:'builder',kind:'feedback'}]};assert.deepEqual(arrange(withFeedback),arrange(session));
 });
 test('unknown cycles and repeated graph updates stay finite and deterministic',()=>{
-  const cyclic={...session,edges:[...session.edges,{source:'tester',target:'planner',kind:'handoff'}]};const p=arrange(cyclic);assert.deepEqual(p,arrange(cyclic));for(const v of Object.values(p)){assert.ok(Number.isFinite(v.x));assert.ok(v.y<=1410);}
+  const cyclic={...session,edges:[...session.edges,{source:'tester',target:'planner',kind:'handoff'}]};const p=arrange(cyclic);assert.deepEqual(p,arrange(cyclic));for(const v of Object.values(p)){assert.ok(Number.isFinite(v.x));assert.ok(v.y<=1680);}
 });
