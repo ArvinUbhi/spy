@@ -1,3 +1,4 @@
+import {DesignLibrary} from './design-library.mjs';
 import {Archive} from './archive.mjs';
 import {Commands} from './commands.mjs';
 import {restoreHistory,saveHistory} from './history.mjs';
@@ -18,6 +19,7 @@ export async function createViewer({ port = defaultPort, production = process.ar
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const store = new Store(), peers = new Set(), metrics=createMetrics(); metrics.sample();
   await restoreHistory(store,historyPath);
+  const designs=new DesignLibrary(historyPath?historyPath+'.designs.json':null);await designs.init();
   const archive=new Archive(historyPath?historyPath+'.archive':null);await archive.init();
   // Upgrade existing snapshots without executing or replaying their events.
   for(const s of store.sessions.values())if(!archive.sessions.has(s.id))for(const a of Object.values(s.agents)){
@@ -70,17 +72,23 @@ export async function createViewer({ port = defaultPort, production = process.ar
         const markdown=url.searchParams.get('format')==='markdown';res.writeHead(200,{'Content-Type':markdown?'text/markdown; charset=utf-8':'application/x-ndjson','Content-Disposition':`attachment; filename="spy-transcript.${markdown?'md':'jsonl'}"`,'Cache-Control':'no-store'});if(markdown)res.write('# Spy captured transcript\n\n');
         try{for await(const line of archive.export(id,url.searchParams.get('agent')||undefined)){if(res.destroyed)break;const r=markdown?JSON.parse(line):null;const output=markdown?`## ${r.event.type} · ${r.agentId}\n\n${new Date(r.at).toISOString()}\n\n${JSON.stringify(r.event.data,null,2).split('\n').map(s=>'    '+s).join('\n')}\n\n`:line;if(!res.write(output))await new Promise(resolve=>{const done=()=>{res.off('drain',done);res.off('close',done);resolve();};res.once('drain',done);res.once('close',done);});}res.end();}catch{res.destroy();}return;
       }
-      if (req.method !== 'POST') return json(405, { error: 'POST required' });
+      if(url.pathname==='/api/designs'&&req.method==='GET')return json(200,{documents:designs.list()});
+      if(url.pathname.startsWith('/api/designs/')&&req.method==='GET'){try{return json(200,designs.get(decodeURIComponent(url.pathname.slice('/api/designs/'.length))));}catch(e){return json(e.status||400,{error:e.message});}}
+      if (req.method !== 'POST'&&!(['PUT','DELETE'].includes(req.method)&&url.pathname.startsWith('/api/designs/'))) return json(405, { error: 'POST required' });
       if (req.headers['x-agent-viewer'] !== '1') return json(403, { error: 'Bridge header required' });
+      if(url.pathname==='/api/designs'||url.pathname.startsWith('/api/designs/')){
+        try{let body='',bytes=0;for await(const chunk of req){bytes+=chunk.length;if(bytes>1200000)return json(413,{error:'Design payload exceeds 1.2 MB'});body+=chunk;}const data=JSON.parse(body);if(req.method==='DELETE')return json(200,await designs.remove(decodeURIComponent(url.pathname.slice('/api/designs/'.length)),data.expectedRevision));const d=url.pathname==='/api/designs'?await designs.create(data):await designs.update(decodeURIComponent(url.pathname.slice('/api/designs/'.length)),data);return json(url.pathname==='/api/designs'?201:200,d);}catch(e){return json(e.status||400,{error:e.message});}
+      }
       if(url.pathname==='/api/history/settings'){
         try{let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>2000)return json(413,{error:'Settings too large'});}const value=await archive.configure(JSON.parse(body));changed();return json(200,value);}catch(e){return json(400,{error:e.message});}
       }
       if (url.pathname === '/api/demo/start') { if (!stopDemo) stopDemo = startDemo(store, changed); return json(200, { ok: true }); }
       if (url.pathname === '/api/demo/stop') { stopDemo?.(); stopDemo = undefined; return json(200, { ok: true }); }
       if(url.pathname.startsWith('/api/clear/')){let id;try{id=decodeURIComponent(url.pathname.slice('/api/clear/'.length));}catch{return json(400,{error:'Invalid session ID'});}const ok=store.clearDetails(id);changed();return json(ok?200:404,{ok});}
-      if(['/api/prompts','/api/commands/pull','/api/commands/ack'].includes(url.pathname)){
+      if(['/api/prompts','/api/commands/pull','/api/commands/ack','/api/commands/cancel'].includes(url.pathname)){
         try{let body='',bytes=0;for await(const chunk of req){bytes+=chunk.length;if(bytes>32000)return json(413,{error:'Payload too large'});body+=chunk;}const d=JSON.parse(body);
-          if(url.pathname==='/api/prompts'){const c=commands.submit(store.sessions.get(d.sessionId),d.agentId,d.prompt);c.status='archiving';try{store.ingest({sessionId:d.sessionId,event:{id:'prompt:'+c.id,type:'viewer.prompt_queued',agentId:d.agentId,data:{content:c.prompt,commandId:c.id,status:'queued'}}});await archive.flush();c.status='queued';}catch(e){c.status='failed';c.error='Prompt was not dispatched because history could not be saved';throw e;}return json(202,{id:c.id,status:c.status});}
+          if(url.pathname==='/api/prompts'){const c=commands.submit(store.sessions.get(d.sessionId),d.agentId,d.prompt,Date.now(),d.clientRequestId);if(c.historyRecorded||c.status==='archiving')return json(202,{id:c.id,status:c.status});c.status='archiving';try{store.ingest({sessionId:d.sessionId,event:{id:'prompt:'+c.id,type:'viewer.prompt_queued',agentId:d.agentId,data:{content:c.prompt,commandId:c.id,status:'queued'}}});await archive.flush();c.historyRecorded=true;c.status='queued';}catch(e){c.status='failed';c.error='Prompt was not dispatched because history could not be saved';throw e;}return json(202,{id:c.id,status:c.status});}
+          if(url.pathname==='/api/commands/cancel'){const c=commands.cancel(d.id,d.sessionId);store.ingest({sessionId:d.sessionId,event:{id:'cancel:'+c.id,type:'viewer.prompt_delivery',agentId:c.agentId,data:{commandId:c.id,status:'cancelled'}}});await archive.flush();changed();return json(200,c);}
           const s=store.sessions.get(d.sessionId);if(!s||!d.bridgeId||s.coverage?.bridgeId!==d.bridgeId)return json(403,{error:'Bridge identity mismatch'});
           if(url.pathname.endsWith('/pull'))return json(200,{commands:commands.pull(d.sessionId,d.bridgeId)});
           const c=commands.acknowledge(d.id,d.bridgeId,d.status,d.error);store.ingest({sessionId:d.sessionId,event:{id:'delivery:'+c.id,type:'viewer.prompt_delivery',agentId:c.agentId,data:{commandId:c.id,status:c.status,error:c.error}}});await archive.flush();return json(200,c);
@@ -130,9 +138,9 @@ export async function createViewer({ port = defaultPort, production = process.ar
   if (demo) stopDemo = startDemo(store, changed);
 
   const cleanup=setInterval(()=>{if(store.maintain(Date.now(),true))changed();},5000);
-  const close=() => closing ||= (async () => { clearInterval(archiveTimer);clearInterval(historyTimer);await archive.flush().catch(e=>console.error('[Spy] History archive: '+e.message));await saving;await persist();clearInterval(timer); clearInterval(keepalive);clearInterval(resourceTimer);clearInterval(autoTimer);clearInterval(cleanup); stopDemo?.(); for (const peer of peers) peer.end();peers.clear();cache.clear();store.clear();await vite?.close();await new Promise(r=>{server.close(r);server.closeIdleConnections();});})();
+  const close=() => closing ||= (async () => { clearInterval(archiveTimer);clearInterval(historyTimer);await designs.close();await archive.flush().catch(e=>console.error('[Spy] History archive: '+e.message));await saving;await persist();clearInterval(timer); clearInterval(keepalive);clearInterval(resourceTimer);clearInterval(autoTimer);clearInterval(cleanup); stopDemo?.(); for (const peer of peers) peer.end();peers.clear();cache.clear();store.clear();await vite?.close();await new Promise(r=>{server.close(r);server.closeIdleConnections();});})();
   if(process.argv.includes('--auto')) { const bootAt=Date.now();autoTimer=setInterval(()=>{const lastSeen=Math.max(bootAt,...[...store.sessions.values()].map(s=>s.lastSeen));if(!peers.size && Date.now()-lastSeen>120000)void close();},10000); }
-  return {server,store,archive,close};
+  return {server,store,archive,designs,close};
 }
 if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   const viewer = await createViewer({historyPath:process.env.SPY_HISTORY_PATH||resolve(homedir(),'.copilot','spy','history.json')});

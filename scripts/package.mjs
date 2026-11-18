@@ -5,7 +5,7 @@ import { zipSync, unzipSync } from 'fflate';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { version } = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const files = {};
-const privatePaths=new Set(process.env.SPY_HISTORY_PATH?[resolve(process.env.SPY_HISTORY_PATH),resolve(process.env.SPY_HISTORY_PATH)+'.tmp',resolve(process.env.SPY_HISTORY_PATH)+'.archive']:[]);
+const privatePaths=new Set(process.env.SPY_HISTORY_PATH?[resolve(process.env.SPY_HISTORY_PATH),resolve(process.env.SPY_HISTORY_PATH)+'.tmp',resolve(process.env.SPY_HISTORY_PATH)+'.archive',resolve(process.env.SPY_HISTORY_PATH)+'.designs.json',resolve(process.env.SPY_HISTORY_PATH)+'.designs.json.tmp']:[]);
 const excluded = new Set(['node_modules', '.git', 'release', '.codex', 'reports', 'test-results']);
 async function walk(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {

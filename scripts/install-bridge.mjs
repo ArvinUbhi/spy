@@ -17,6 +17,7 @@ if (process.argv.includes('--remove')) {
   await access(resolve(root, 'dist/index.html')).catch(()=>{throw Error('Build Spy first (npm run build), or use the ready-built release ZIP.');});
   await mkdir(target, { recursive: true });
   for (const name of ['core.mjs','collector.mjs','lifecycle.mjs','sdk.mjs','control.mjs']) await writeFile(resolve(target,name),await readFile(resolve(root,'bridge',name)));
+  await cp(resolve(root,'shared'),resolve(target,'runtime/shared'),{recursive:true});
   await cp(resolve(root,'server'),resolve(target,'runtime/server'),{recursive:true});
   await cp(resolve(root,'dist'),resolve(target,'runtime/dist'),{recursive:true});
   if (previous !== content) await writeFile(file, content);

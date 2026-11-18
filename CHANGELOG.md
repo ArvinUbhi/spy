@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 — 2026-11-18
+
+- Rebuild Design as Workflow Studio: block/template palette, central canvas, tabbed inspector, focus/expanded editing, readable cards and an export workspace loaded on demand.
+- Add agent/start/decision/finish blocks, IO/verification contracts, join rules and editable connections with success/failure conditions, requested payload/context and bounded feedback. Preserve these fields in JSON, Markdown and skill/plugin exports.
+- Persist a design library with autosave, optimistic revision checks, undo/redo, named/periodic checkpoints, restore, duplicate and reversible archive. Explicit permanent removal is limited to archived designs. Keep 30 active / 50 stored designs and bounded checkpoint storage.
+- Add actionable design checks, expected-vs-observed comparison, per-session runtime links, ambiguous-instance selection, live card/inspector activity and capture of an observed topology.
+- Preview success/failure paths, incoming information, parallel joins and feedback limits without executing agents.
+- Prepare stage corrections or a coordinator workflow update for explicit runtime delivery. Add correction templates, per-agent draft recovery, recent receipts, queued-prompt cancellation and retry-safe request IDs.
+- Package shared runtime design modules and keep private design files out of distribution ZIPs.
+
 ## 0.6.0 — 2026-11-18
 
 - Add a disk-backed segmented event archive, independent of the small live graph cache. Default retention is 30 days / 512 MB total / 128 MB per session; users can adjust this in History & storage.
