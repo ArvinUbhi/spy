@@ -28,7 +28,7 @@ function enqueue(event) {
   const projected = projectEvent(event, randomUUID);
   if (projected) queue.push({ sessionId, name: basename(process.cwd()), cwd: process.cwd(), source: 'live', bridgeId, sequence:++sequence, bridgeMetrics, event: projected });
 }
-session.on(event => enqueue(event));
+const unsubscribe=session.on(event=>{enqueue(event);if(event.type==='session.shutdown')void shutdown();});
 enqueue({ type: 'viewer.metadata', data: { name: basename(process.cwd()) } });
 // One read-only catalog snapshot on attachment; no session-history scan or polling.
 Promise.allSettled([
@@ -59,4 +59,6 @@ async function flush() {
   finally { busy = false; }
 }
 const flusher = setInterval(flush, 180);
-for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, async () => { clearInterval(heartbeat); clearInterval(flusher); enqueue({ type: 'viewer.disconnect', data: {} }); await flush(); process.exit(0); });
+let shuttingDown=false;
+async function shutdown(){if(shuttingDown)return;shuttingDown=true;clearInterval(heartbeat);clearInterval(flusher);if(typeof unsubscribe==='function')unsubscribe();enqueue({type:'viewer.disconnect',data:{}});const deadline=Date.now()+1800;while(busy&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));while(ready&&queue.size&&Date.now()<deadline)await flush();queue.clear();process.exit(0);}
+for(const sig of ['SIGTERM','SIGINT'])process.once(sig,()=>void shutdown());

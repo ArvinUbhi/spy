@@ -7,5 +7,6 @@ test('actual extension joins, forwards catalogs/events/metadata and reports proc
   child.send({event:{id:'usage',type:'assistant.usage',agentId:'verifier',data:{model:'test-model',inputTokens:123,outputTokens:12}}});child.send({tool:{name:'spy_observe',arguments:{type:'viewer.iteration',loopId:'contract',iteration:1,outcome:'passed'}}});
   const until=Date.now()+8000;let s;while(Date.now()<until){s=viewer.store.snapshot()[0];if(s?.bridgeMetrics&&s.loops?.length&&s.agents.find(a=>a.id==='verifier')?.tokens===135)break;await new Promise(r=>setTimeout(r,100));}
   assert.equal(s.agents.find(a=>a.id==='verifier').tokens,135);assert.equal(s.skillCatalog[0].name,'test-skill');assert.equal(s.loops[0].iterations[0].outcome,'passed');assert.ok(s.bridgeMetrics.rssMiB>0);assert.equal(s.coverage.missingEvents,0);
+  child.send({event:{type:'session.shutdown',data:{}}});await Promise.race([exit,new Promise((_,no)=>setTimeout(()=>no(Error('Bridge failed to exit after session shutdown')),5000).unref())]);
  }finally{child.kill();await exit;await viewer.close();}
 });

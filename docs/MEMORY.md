@@ -16,6 +16,8 @@ Spy retains current state, not a session archive. Limits below apply to applicat
 | Hidden browser tabs | Close the event stream and release live snapshots; reconnect when visible. |
 | Design drafts | Explicit authoring data stays in page memory until reset or page close. Imports capped at 1 MB; exports at 2 MB. |
 
+Native session shutdown also stops the bridge’s timers and subscriptions, clears its queue and exits the bridge process.
+
 Cleanup does not depend on a browser being connected. **Clear details** releases the selected session's old payloads immediately without stopping Copilot. The viewer labels cleared, incomplete, stale and visibility-limited data. Cleared content is not recoverable from Spy; new live events resume normally.
 
 `npm run test:memory` runs repeated synthetic churn and cleanup under forced garbage collection, verifies state budgets and checks settled heap growth. Unit/browser tests cover expiry, bounded aliases/queues, stream teardown and manual clearing. Passing these checks is evidence against tested retention regressions, not proof that every possible leak is absent.
