@@ -16,3 +16,4 @@
 .topology-banner{padding:10px 18px;color:#bcd6c3;font-size:10px;border-bottom:1px solid #344b3b;background:#233528}.topology-banner button{border:0;background:transparent;color:#d7d494;text-decoration:underline;cursor:pointer;font-size:10px}.focused .topology-banner{display:none}
 
 .agent-node:not(.selected) .pulse{animation:none}
+.design-canvas{position:relative;overflow:hidden}.design-canvas .react-flow{position:absolute!important}
