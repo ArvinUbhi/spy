@@ -19,8 +19,8 @@ try {
   const install = spawnSync(process.execPath, ['scripts/install-bridge.mjs'], { cwd: app, env: { ...process.env, SPY_EXTENSION_DIR: extension }, encoding: 'utf8' });
   assert.equal(install.status, 0, install.stderr);
   assert.match(await readFile(resolve(extension, 'extension.mjs'), 'utf8'), /Spy session bridge/);
-  for(const path of ['core.mjs','collector.mjs','sdk.mjs','runtime/server/metrics.mjs','runtime/dist/index.html']) await access(resolve(extension,path));
-  child = spawn(process.execPath, ['server/index.mjs', '--production', '--port', '0'], { cwd: app, stdio: ['ignore', 'pipe', 'pipe'] });
+  for(const path of ['core.mjs','collector.mjs','sdk.mjs','control.mjs','runtime/server/metrics.mjs','runtime/dist/index.html']) await access(resolve(extension,path));
+  child = spawn(process.execPath, ['server/index.mjs', '--production', '--port', '0'], { cwd: app, env:{...process.env,SPY_HISTORY_PATH:resolve(temp,'history.json')}, stdio: ['ignore', 'pipe', 'pipe'] });
   const base = await new Promise((yes, no) => {
     let output = ''; const timer = setTimeout(() => no(new Error('ZIP server startup timed out')), 10000);
     child.on('error', no); child.on('exit', code => { clearTimeout(timer); no(new Error('ZIP server exited ' + code)); });
@@ -36,11 +36,11 @@ try {
   const css = page.match(/href="([^"]+\.css)"/)[1];
   const style = await fetch(base + css); assert.equal(style.status, 200); assert.match(style.headers.get('content-type'), /text\/css/);
   const missing = await fetch(base + '/assets/missing.js'); assert.equal(missing.status, 404); assert.doesNotMatch(await missing.text(), /<!doctype/i);
-  assert.equal((await (await fetch(base + '/api/health')).json()).storage, 'memory');
+  assert.equal((await (await fetch(base + '/api/health')).json()).storage, 'local-history');
   const probe=http.createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const launchPort=probe.address().port;await new Promise(r=>probe.close(r));
   const endpoint=`http://127.0.0.1:${launchPort}`;
   async function startLauncher() {
-    const process=spawn(globalThis.process.execPath,['scripts/launch.mjs','--no-open','--port',String(launchPort)],{cwd:app,env:{...globalThis.process.env,SPY_EXTENSION_DIR:extension},stdio:['ignore','pipe','pipe']});
+    const process=spawn(globalThis.process.execPath,['scripts/launch.mjs','--no-open','--port',String(launchPort)],{cwd:app,env:{...globalThis.process.env,SPY_EXTENSION_DIR:extension,SPY_HISTORY_PATH:resolve(temp,'launcher-history.json')},stdio:['ignore','pipe','pipe']});
     let output='';process.stdout.on('data',chunk=>output+=chunk);process.stderr.on('data',chunk=>output+=chunk);
     await new Promise((yes,no)=>{const deadline=Date.now()+15000;const timer=setInterval(()=>{if(output.includes('Keep this window open.')){clearInterval(timer);yes();}else if(process.exitCode!==null||Date.now()>deadline){clearInterval(timer);no(Error('Foreground launcher failed: '+output));}},50);});
     return process;

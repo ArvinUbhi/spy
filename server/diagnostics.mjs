@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 // Bounded live instrumentation; no journals or background polling.
 export function transport(s, packet) {
   s.coverage ||= {missingEvents:0,reorderedEvents:0,attachments:0};
@@ -24,6 +25,13 @@ export function instrument(s,a,event,at) {
     a.runs.push({start:at});if(a.runs.length>30){a.runs.shift();a.runsClipped=true;}
   }
   if(['completed','failed','cancelled'].includes(state)||type==='assistant.turn_end'||type==='session.idle'){const run=a.runs?.at(-1);if(run&&!run.end)run.end=at;}
+  if(type==='tool.execution_start'){
+    a.toolCalls=(a.toolCalls||0)+1;
+    let args=d.arguments;if(typeof args==='string')try{args=JSON.parse(args);}catch{}
+    const canonical=value=>value&&typeof value==='object'?(Array.isArray(value)?value.map(canonical):Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])]))):value;
+    a.attempts ||= [];a.attempts.push({id:d.toolCallId,name:String(d.toolName||'Tool').slice(0,200),key:createHash('sha256').update(JSON.stringify([d.toolName,canonical(args)])).digest('hex'),at});a.attempts=a.attempts.slice(-60);
+  }
+  if(type==='tool.execution_complete'){const owner=s.agents[s.aliases[d.toolCallId]]?.parentId;const target=Object.values(s.agents).find(x=>x.attempts?.some(t=>t.id===d.toolCallId))||s.agents[owner]||a;const t=target.attempts?.find(t=>t.id===d.toolCallId);if(t){t.outcome=d.success===false?'failed':'completed';t.end=at;}if(d.success===false)target.toolFailures=(target.toolFailures||0)+1;}
   if(type==='assistant.usage'){
     a.usage ||= [];const model=String(d.model||a.model||'Not reported').slice(0,200);
     let row=a.usage.find(r=>r.model===model);

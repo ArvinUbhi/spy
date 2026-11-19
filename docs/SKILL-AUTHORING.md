@@ -13,3 +13,5 @@ The plugin export contains a standard Agent Plugins 1.0 `plugin.json` and immedi
 The generated skill tells the coordinator to use real delegation, load required definitions, verify external dependencies, resolve models/tools, follow the graph, bound feedback iterations and return evidence. Role briefs are instructions, not installed custom-agent profiles. A skill cannot guarantee model availability, independent hidden context or runtime scheduling. Real signed-in Copilot acceptance remains unverified here.
 
 Official formats: [Copilot skills](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills) · [Plugin reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference).
+
+Workflow Studio 0.7 adds typed control blocks, IO/verification contracts, joins and conditional connection rules to version-1 design files. Exported role briefs cover agent blocks; start/decision/finish blocks appear as control instructions. See [Workflow Studio](WORKFLOW-STUDIO.md).

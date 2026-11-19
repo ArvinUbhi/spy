@@ -32,13 +32,13 @@ test('deduplicates reconnect retries, expires sessions and flags missing heartbe
   store.ingest(p, at); store.ingest(p, at + 1000);
   assert.equal(store.snapshot(at)[0].agents[0].tokens, 20);
   assert.equal(store.snapshot(at + 40_000)[0].status, 'disconnected');
-  assert.equal(store.snapshot(at + 700_000).length, 0);
+  assert.equal(store.snapshot(at + 8*24*60*60*1000).length, 0);
 });
 test('feedback edges are explicit, and buffers remain bounded', () => {
   const store = new Store();
   store.ingest(packet('viewer.edge', { source: 'reviewer', target: 'builder', kind: 'feedback', label: 'retry' }), at);
-  for (let i = 0; i < 100; i++) store.ingest(packet('assistant.intent', { intent: 'Working' }), at);
-  const s = store.snapshot(at)[0]; assert.equal(s.edges[0].kind, 'feedback'); assert.equal(s.agents[0].events.length, 24);
+  for (let i = 0; i < 300; i++) store.ingest(packet('assistant.intent', { intent: 'Working' }), at);
+  const s = store.snapshot(at)[0]; assert.equal(s.edges[0].kind, 'feedback'); assert.equal(s.agents[0].events.length, 120);
 });
 test('heartbeat does not overwrite an idle session; new turn reactivates it', () => {
   const store = new Store(); store.ingest(packet('session.idle'), at); store.ingest(packet('viewer.heartbeat'), at + 1000);

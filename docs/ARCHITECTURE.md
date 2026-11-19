@@ -1,6 +1,6 @@
 # Spy architecture
 
-Spy is a local observer with a React/React Flow canvas, a dependency-free production Node HTTP/SSE collector and a Copilot CLI session extension. It does not use SQLite or persist session history.
+Spy is a local observer with a React/React Flow canvas, a dependency-free production Node HTTP/SSE collector and a Copilot CLI session extension. It persists a bounded local JSON history snapshot, without SQLite. Optional runtime task reconciliation and explicitly submitted prompts share the loopback transport.
 
 ## Data path
 
@@ -10,17 +10,17 @@ User-level installation copies the collector and built React assets alongside th
 
 The collector correlates native subagent invocations with spawning tool calls and available instance/parent metadata. The envelope `parentId` is chronological ordering and is not an agent hierarchy. Unknown relationships are visibly marked. Native task-tool prompts/results form runtime-observed context-transfer records. Explicit `viewer.context_handoff` and `viewer.context_mode` events (or the `spy_observe` extension tool) record orchestrator-reported sharing metadata with visible provenance. Unknown context isolation remains unknown. Explicit `viewer.edge` events identify workflow feedback/handoff relationships that cannot be established from native delegation alone.
 
-One browser subscription receives the selected graph plus lightweight summaries of the other sessions. Graph updates are coalesced at 100 ms; collector metrics use small separate one-second events. Bridges send a heartbeat/resource sample every five seconds. SSE reconnect sends the current projection. Failed or missed historical events cannot be recovered after collector restart.
+One browser subscription receives the selected graph plus lightweight summaries of the other sessions. Graph updates are coalesced at 100 ms; collector metrics use small separate one-second events. Bridges send a heartbeat/resource sample every five seconds. SSE reconnect sends the current projection. Hidden tabs and transient failures retain their last snapshot. The collector saves history atomically every two seconds and on graceful shutdown; a crash can lose the latest unsaved events. Events never received by Spy cannot be recovered.
 
 ## Memory limits
 
-40 sessions, 160 agents/session, 60 activity entries/agent, 120 tools/agent, 400 explicit edges/session and 300 queued events/bridge. Additional active tools are omitted with a visibility-cap message; older completed tools/nodes are evicted first. Disconnected sessions expire after ten minutes. Context transfers retain at most 120 records/session with 6,000-character payloads. Agents retain 20 skill records with 2,000-character content excerpts; session catalogs retain 60 definitions each. These limits bound display state rather than constrain Copilot's actual work.
+40 sessions, 160 agents/session, 120 activity entries/agent, 24 tools/agent, 400 explicit edges/session and 2,048 queued events/bridge. Additional active tools are omitted with a visibility-cap message; older completed tools/nodes are evicted first. Sessions expire seven days after last bridge contact. Context transfers retain at most 120 records/session with 6,000-character payloads. Agents retain 20 skill records with 2,000-character content excerpts; session catalogs retain 60 definitions each. These limits bound display state rather than constrain Copilot's actual work.
 
 ## Designing orchestration
 
 The graph distinguishes observable execution relationships from explicitly supplied feedback metadata. Clicking nodes exposes reported models, current actions, tool output, wall time and model request time when provided. Tool durations can overlap, so they are not summed as wall time. Slow-tool thresholds surface bottlenecks for your orchestration work.
 
-Node dragging rearranges the view; it does not modify agent instructions or a running workflow. Runtime organisation editing, model switching, cancellation and autonomous optimisation are not implemented in this observer release. Such control needs an explicit workflow contract, evaluation tasks and a runtime integration.
+Node dragging rearranges the view; it does not modify agent instructions or a running workflow. The inspector supports coordinator steering and targeted task prompts through optional SDK methods. Runtime organisation editing, model switching, cancellation and autonomous optimisation are not implemented. Such control needs an explicit workflow contract, evaluation tasks and a runtime integration.
 
 An orchestrator may POST this packet to `/api/events` with `Content-Type: application/json` and `X-Agent-Viewer: 1`:
 
@@ -57,3 +57,7 @@ The ZIP's production collector uses only Node built-ins; build tools are not loa
 ## Custom observation events
 
 `spy_observe` accepts `viewer.context_handoff` (`source`, `target`, optional `payload`, `summary`, `mode`), `viewer.context_mode` (`agentId`, `mode`), `viewer.agent_state` (`agentId`, `state`, `reason`) and `viewer.structure_change` (`message`). These are observer annotations, not execution controls. The same packets can be posted to the local event endpoint. Mode is `shared`, `isolated` or `unknown`. State is `running`, `idle`, `waiting`, `blocked`, `completed`, `failed`, `cancelled` or `unknown`. Native tool/skill payloads have runtime provenance; annotations cannot promote themselves to runtime evidence.
+
+## Event archive and agent workspace
+
+The store emits validated captured events with resolved agent ownership to a segmented local archive. This path is separate from snapshot byte-budget trimming. Archive pages are read on demand through `/api/history`; `/api/history/export` streams Markdown or JSONL. Retention settings use `/api/history/settings` and persist in the archive manifest. Bridge heartbeats and repetitive task-registry confirmations are not journaled; visible streaming deltas and final responses are. Private reasoning remains excluded. Permission/input completions retain their original request owner even when the envelope omits agentId. Archived agent summaries can rebuild a browsable graph after hot session expiry. The full agent workspace is accessible by double-click and by an explicit inspector button, with focus management, Escape, search, and readable mobile layout.

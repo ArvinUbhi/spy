@@ -4,3 +4,5 @@ dist/
 release/
 reports/
 test-results/
+
+.spy-e2e-history-*.json*

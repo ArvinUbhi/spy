@@ -4,7 +4,7 @@ import { projectEvent, createBuffer } from '../bridge/core.mjs';
 test('bridge excludes private reasoning and opaque fields, clips huge output', () => {
   assert.equal(projectEvent({ type: 'assistant.reasoning', data: { content: 'private' } }, () => 'id'), null);
   const event = projectEvent({ type: 'assistant.message', data: { content: 'x'.repeat(100_000), reasoningOpaque: 'secret', encryptedContent: 'secret', reasoningText: 'private' } }, () => 'id');
-  assert.equal(event.data.content.length, 6000); assert.equal(event.data.reasoningOpaque, undefined); assert.equal(event.data.reasoningText, undefined);
+  assert.equal(event.data.content.length, 64000); assert.equal(event.data.reasoningOpaque, undefined); assert.equal(event.data.reasoningText, undefined);
 });
 test('bounded bridge retries retain order and report dropped events', () => {
   const buffer = createBuffer(3);

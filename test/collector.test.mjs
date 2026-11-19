@@ -28,7 +28,7 @@ test('rejects remote collector URLs',async()=>{await assert.rejects(ensureCollec
 test('collector starts through a symlinked installation path (macOS /var alias)',async()=>{
   const dir=await mkdtemp(resolve(tmpdir(),'spy-symlink-'));let pid;
   try{
-    const real=resolve(dir,'real');await mkdir(real);await cp(resolve('server'),resolve(real,'server'),{recursive:true});
+    const real=resolve(dir,'real');await mkdir(real);await cp(resolve('server'),resolve(real,'server'),{recursive:true});await cp(resolve('shared'),resolve(real,'shared'),{recursive:true});
     const alias=resolve(dir,'alias');await symlink(real,alias,process.platform==='win32'?'junction':'dir');
     const port=await freePort();const result=await ensureCollector({endpoint:`http://127.0.0.1:${port}`,script:resolve(alias,'server/index.mjs'),lockDirectory:resolve(dir,'locks')});
     pid=result.pid;assert.ok(pid>0);assert.equal(result.started,true);

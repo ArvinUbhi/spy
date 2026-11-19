@@ -35,12 +35,21 @@ try{
  child=spawn(cli.endsWith('.js')?process.execPath:cli,cli.endsWith('.js')?[cli,...args]:args,{cwd:home,env,stdio:['ignore','pipe','pipe']});
  child.stdout.on('data',chunk=>output=(output+chunk).slice(-4000));child.stderr.on('data',chunk=>output=(output+chunk).slice(-4000));
  timer=setTimeout(()=>child.kill(),90000);
- const code=await new Promise((yes,no)=>{child.once('error',no);child.once('exit',yes);});
+ const exited=new Promise((yes,no)=>{child.once('error',no);child.once('exit',yes);});
+ let promptControl='unsupported',promptSession;const deadline=Date.now()+12000;
+ while(Date.now()<deadline&&!promptSession){promptSession=viewer.store.snapshot().find(s=>s.capabilities?.prompt);if(!promptSession)await new Promise(r=>setTimeout(r,100));}
+ if(promptSession){
+   const response=await fetch(env.SPY_URL+'/api/prompts',{method:'POST',headers:{'Content-Type':'application/json','X-Agent-Viewer':'1'},body:JSON.stringify({sessionId:promptSession.id,agentId:'root',prompt:'Also confirm this instruction was received. Reply OK only.'})});
+   assert.equal(response.status,202);const command=await response.json();let result;
+   while(Date.now()<deadline){result=(await(await fetch(env.SPY_URL+'/api/commands?session='+encodeURIComponent(promptSession.id))).json()).find(c=>c.id===command.id);if(['sent','failed'].includes(result?.status))break;await new Promise(r=>setTimeout(r,100));}
+   assert.equal(result?.status,'sent',result?.error||'Prompt delivery did not receive an acknowledgement');promptControl='runtime acknowledged';
+ }
+ const code=await exited;
  assert.equal(code,0,output);assert.equal(registered,true,'Real CLI must register spy_observe');
  const sessions=viewer.store.snapshot();assert.equal(sessions.length,1,'Real CLI events must reach Spy');
  assert.ok(sessions[0].bridgeMetrics?.rssMiB>0,'Real bridge heartbeat must reach Spy');
  passed=true;
- const report={passed,node:process.version,platform:process.platform,cli:cliVersion,registeredSpyTool:registered,liveSessions:sessions.length,heartbeatReceived:true,scope:'Real Copilot CLI and bundled SDK; isolated offline home and local model fixture. No GitHub login, paid model or enterprise policy acceptance.'};
+ const report={passed,node:process.version,platform:process.platform,cli:cliVersion,registeredSpyTool:registered,liveSessions:sessions.length,heartbeatReceived:true,promptControl,capabilities:sessions[0].capabilities,scope:'Real Copilot CLI and bundled SDK; isolated offline home and local model fixture. No GitHub login, paid model or enterprise policy acceptance.'};
  await mkdir(resolve(root,'reports'),{recursive:true});await writeFile(resolve(root,'reports/cli-compatibility.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 }finally{
  clearTimeout(timer);

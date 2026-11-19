@@ -22,7 +22,7 @@ Spy is a local React dashboard for observing and designing GitHub Copilot CLI or
 
 ## Scope
 
-- Current state stays in bounded memory: no database or saved session history.
+- Bounded local history survives reconnects and restarts; seven-day expiry and byte caps apply.
 - Existing CLI sessions need the bridge loaded; earlier activity cannot be reconstructed.
 - Unknown models/context stay unknown. Full context sharing and iteration outcomes require explicit metadata.
 - Critical paths and diagnostics cover observed events; some checks are heuristics. Rate estimates are not Copilot billing.
@@ -33,7 +33,7 @@ Spy is a local React dashboard for observing and designing GitHub Copilot CLI or
 
 ## Memory cleanup and skill authoring (0.4)
 
-- Byte-bounded delivery queues, independent cleanup, idle/uninspected payload expiry, stale-state handling and explicit clearing. Hidden tabs release live snapshots. See [memory limits](docs/MEMORY.md).
+- Byte-bounded delivery queues, independent cleanup, seven-day session expiry, stale-state handling and explicit clearing. Hidden tabs close streams and preserve their last snapshot. See [memory limits](docs/MEMORY.md).
 - Define reusable skills, assign required/recommended skills per agent, edit role/workflow instructions and preview generated SKILL.md files. Export installable skill folders or a standard marketplace plugin directory. See [skill authoring](docs/SKILL-AUTHORING.md).
 
 ## v0.4.1
@@ -52,3 +52,7 @@ Spy is a local React dashboard for observing and designing GitHub Copilot CLI or
 
 - Fixed Copilot 1.0.113 extension startup: supports Microsoft SDK v2 imports/tool definitions and older GitHub SDK hosts. No extra SDK installation.
 - Real CLI compatibility tests verify extension startup, spy_observe registration and live heartbeat/events using an offline local model fixture. CI pins Node 22.14 and Copilot 1.0.113 on Windows/Linux.
+
+## v0.6 agent workspaces
+
+Double-click agents for searchable captured conversations, tool arguments/results, permission/input requests, paginated activity, copy and Markdown/JSONL export. Needs attention links to problematic agents. History & storage offers 30-day / 512 MB defaults, larger configurable budgets, archive-only sessions, snapshot migration and crash-tail recovery.

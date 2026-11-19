@@ -5,11 +5,13 @@ import { zipSync, unzipSync } from 'fflate';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { version } = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const files = {};
+const privatePaths=new Set(process.env.SPY_HISTORY_PATH?[resolve(process.env.SPY_HISTORY_PATH),resolve(process.env.SPY_HISTORY_PATH)+'.mcp.json',resolve(process.env.SPY_HISTORY_PATH)+'.mcp.json.tmp',resolve(process.env.SPY_HISTORY_PATH)+'.tmp',resolve(process.env.SPY_HISTORY_PATH)+'.archive',resolve(process.env.SPY_HISTORY_PATH)+'.designs.json',resolve(process.env.SPY_HISTORY_PATH)+'.designs.json.tmp']:[]);
 const excluded = new Set(['node_modules', '.git', 'release', '.codex', 'reports', 'test-results']);
 async function walk(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
-    if (excluded.has(entry.name) || entry.name.endsWith('.log')) continue;
+    if (excluded.has(entry.name) || entry.name.startsWith('.spy-e2e-history-') || entry.name.endsWith('.log')) continue;
     const path = resolve(dir, entry.name);
+    if(privatePaths.has(path)||entry.name.endsWith('.json.archive')||entry.name.endsWith('.mcp.json')||entry.name.endsWith('.mcp.json.tmp')||entry.name.endsWith('.designs.json')||entry.name.endsWith('.designs.json.tmp'))continue;
     if (entry.isDirectory()) await walk(path);
     else if (entry.isFile()) files['spy/' + relative(root, path).replaceAll('\\', '/')] = new Uint8Array(await readFile(path));
   }
