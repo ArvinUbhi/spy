@@ -45,3 +45,14 @@ GitHub references checked for this implementation:
 - https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference
 
 Live edits remain a separate action: Prepare updated brief targets an existing agent's instructions; Prepare workflow update targets the coordinator. A prompt cannot retroactively verify or silently change the model of a running invocation. For a different required model, create a supported new invocation or ask the user to change the session model.
+
+
+## Start from a loop template
+
+1. Open **Design → Loop templates**. Choose build/review for a small change, build/test for a bug fix, independent verification for both checks, research/challenge for evidence gathering, or a decision gate for explicit acceptance.
+2. **Use** creates a separate saved design and opens its canvas. Green arrows move forward; dashed amber arrows return failed checks to an earlier stage. Amber labels name the destination and show return/stage caps. Click a label to edit the failure rule. Side handles create feedback; bottom/top handles create forward handoffs.
+3. Assign models in **Team & models**, and write your actual task and acceptance evidence.
+4. In **Walkthrough**, pass implementation, fail review or tests, and confirm that the implementer becomes current again. Pass the next attempt to continue. The walkthrough simulates routing; it does not run a model.
+5. Review and download the Copilot workflow, extract into your repo, restart Copilot and use the supplied run prompt. The coordinator dispatches each rework attempt; workers never recursively start another workflow.
+
+A feedback cap of 2 and stage cap of 3 allow one initial execution plus at most two re-executions of that stage. Both limits apply. Model assignments are left blank for your own supported IDs; Spy never invents access to a model. Existing designs are not replaced by choosing a template.

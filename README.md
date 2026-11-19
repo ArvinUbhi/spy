@@ -4,7 +4,11 @@
 
 A live React graph for your **GitHub Copilot CLI** agents. See delegations, skills, context handoffs, models, tools, timings and running/waiting/blocked/idle states. Click agents to inspect their activity; drag nodes to arrange the view. Spy also reports its collector and bridge CPU/memory use.
 
-## Latest: v0.9.0
+## Latest: v0.9.1
+
+Open **Design → Loop templates** to start from build/review, build/test, full verification, research/challenge or a decision gate. Amber arrows run outside the blocks and point back to the rework stage; green arrows move forward. Click an amber return label to edit its rule or retry cap. Use **Walkthrough** to simulate a failed check and see the return before exporting. Templates create a new saved design; existing designs are preserved.
+
+### v0.9 model and execution setup
 
 Design now starts with **Team & models**, followed by the canvas and a shared execution-plan preview. Assign coordinator/default/per-agent models with required or preferred policies. The recommended Copilot workflow ZIP includes native worker profiles, skills and a run prompt. Retry limits count the initial execution, and only the coordinator owns loop routing. [Design-to-Copilot guide](docs/DESIGN-TO-COPILOT.md).
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1 — 2026-11-19
+
+- Add a prominent Loop templates gallery with forward/return previews and ready-to-use build/review, build/test, full verification, research/challenge and decision-gate loops. Each creates a separate saved design.
+- Draw feedback on dedicated amber side ports and outside return lanes, with arrowheads, clickable destination labels and retry limits. Keep return lanes outside branches and fit them into the canvas. Existing saved feedback edges use the new rendering automatically.
+- Dragging a return port creates a failure feedback rule automatically. Keep forward success routes separate. Add regression coverage for routing, export, persistence and visible loop paths.
+
 ## 0.9.0 — 2026-11-19
 
 - Restructure Design into Team & models, Workflow canvas and Review & export. Put task, acceptance evidence, coordinator/default/per-agent model assignments and retry explanations first; collapse advanced skill authoring.
