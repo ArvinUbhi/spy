@@ -1,3 +1,6 @@
+import {buildCopilotFiles} from '../shared/skill-export.mjs';
+import {designTemplate} from '../shared/designer.mjs';
+import {profileId} from '../shared/workflow-plan.mjs';
 // Real Copilot host/SDK; only the model service is a local deterministic fixture.
 import http from 'node:http';
 import {spawn,spawnSync} from 'node:child_process';
@@ -19,6 +22,7 @@ try{
  const version=spawnSync(cli.endsWith('.js')?process.execPath:cli,cli.endsWith('.js')?[cli,'--version']:['--version'],{cwd:home,env,encoding:'utf8',timeout:30000});
  assert.equal(version.status,0,version.stderr||version.error?.message);const cliVersion=version.stdout.trim().split('\n')[0];
  await writeFile(resolve(home,'settings.json'),JSON.stringify({experimental:true,connectors:false,autoUpdate:false}));
+ const profileDesign=designTemplate('research');profileDesign.defaultAgentModel='spy-test';const profileBundle=buildCopilotFiles(profileDesign);await mkdir(resolve(home,'agents'),{recursive:true});for(const [path,content]of Object.entries(profileBundle.files))if(path.endsWith('.agent.md'))await writeFile(resolve(home,'agents',path.split('/').at(-1)),content);const selectedProfile=profileId(profileDesign,profileDesign.nodes[0],0);
  const install=spawnSync(process.execPath,[resolve(root,'scripts/install-bridge.mjs')],{cwd:root,env:{...env,SPY_EXTENSION_DIR:target},encoding:'utf8'});
  assert.equal(install.status,0,install.stderr);
  viewer=await createViewer({port:0,production:true});env.SPY_URL=`http://127.0.0.1:${viewer.server.address().port}`;
@@ -31,7 +35,7 @@ try{
   else{res.setHeader('content-type','application/json');res.end(JSON.stringify({...data,object:'chat.completion',choices:[{index:0,message:{role:'assistant',content:'OK'},finish_reason:'stop'}],usage:{prompt_tokens:10,completion_tokens:1,total_tokens:11}}));}
  });
  await new Promise(r=>mock.listen(0,'127.0.0.1',r));env.COPILOT_PROVIDER_BASE_URL=`http://127.0.0.1:${mock.address().port}/v1`;
- const args=['--experimental','--trust-folder','--disable-builtin-mcps','--log-level','error','--log-dir',resolve(home,'logs'),'-p','Reply OK only'];
+ const args=['--agent',selectedProfile,'--experimental','--trust-folder','--disable-builtin-mcps','--log-level','error','--log-dir',resolve(home,'logs'),'-p','Reply OK only'];
  child=spawn(cli.endsWith('.js')?process.execPath:cli,cli.endsWith('.js')?[cli,...args]:args,{cwd:home,env,stdio:['ignore','pipe','pipe']});
  child.stdout.on('data',chunk=>output=(output+chunk).slice(-4000));child.stderr.on('data',chunk=>output=(output+chunk).slice(-4000));
  timer=setTimeout(()=>child.kill(),90000);
@@ -49,7 +53,7 @@ try{
  const sessions=viewer.store.snapshot();assert.equal(sessions.length,1,'Real CLI events must reach Spy');
  assert.ok(sessions[0].bridgeMetrics?.rssMiB>0,'Real bridge heartbeat must reach Spy');
  passed=true;
- const report={passed,node:process.version,platform:process.platform,cli:cliVersion,registeredSpyTool:registered,liveSessions:sessions.length,heartbeatReceived:true,promptControl,capabilities:sessions[0].capabilities,scope:'Real Copilot CLI and bundled SDK; isolated offline home and local model fixture. No GitHub login, paid model or enterprise policy acceptance.'};
+ const report={passed,node:process.version,platform:process.platform,cli:cliVersion,registeredSpyTool:registered,exportedModelProfile:selectedProfile,liveSessions:sessions.length,heartbeatReceived:true,promptControl,capabilities:sessions[0].capabilities,scope:'Real Copilot CLI and bundled SDK; isolated offline home and local model fixture. No GitHub login, paid model or enterprise policy acceptance.'};
  await mkdir(resolve(root,'reports'),{recursive:true});await writeFile(resolve(root,'reports/cli-compatibility.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 }finally{
  clearTimeout(timer);

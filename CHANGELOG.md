@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 — 2026-11-19
+
+- Restructure Design into Team & models, Workflow canvas and Review & export. Put task, acceptance evidence, coordinator/default/per-agent model assignments and retry explanations first; collapse advanced skill authoring.
+- Add backwards-compatible required/preferred model policies, effective model comparison and a recommended native Copilot project bundle with named .agent.md profiles, skills and start/run instructions.
+- Compile one explicit coordinator-owned execution plan for preview, Markdown and skills. Workers return PASS/FAIL/BLOCKED instead of recursively running the workflow.
+- Define maxIterations as per-stage executions including the first run, preserve retry counters across invalidation, block ambiguous return routes and add review-failure rework to new verification templates. Existing saved workflows are preserved.
+- Extend real CLI compatibility fixtures to load an exported model profile. Add export/model/retry regression tests and a responsive design setup browser test.
+
+
 ## 0.8.0 — 2026-11-18
 
 - Add Run Centre progress cards, evidence timelines with historical state reconstruction, correction delivery/activity/review tracking, captured file diffs and concurrent-edit warnings, a request/blocker/stall inbox and run comparisons.

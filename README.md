@@ -4,6 +4,10 @@
 
 A live React graph for your **GitHub Copilot CLI** agents. See delegations, skills, context handoffs, models, tools, timings and running/waiting/blocked/idle states. Click agents to inspect their activity; drag nodes to arrange the view. Spy also reports its collector and bridge CPU/memory use.
 
+## Latest: v0.9.0
+
+Design now starts with **Team & models**, followed by the canvas and a shared execution-plan preview. Assign coordinator/default/per-agent models with required or preferred policies. The recommended Copilot workflow ZIP includes native worker profiles, skills and a run prompt. Retry limits count the initial execution, and only the coordinator owns loop routing. [Design-to-Copilot guide](docs/DESIGN-TO-COPILOT.md).
+
 ## Install
 
 **Requires:** Node.js **22.12+** and a signed-in **Copilot CLI** with extension support. **No `gh`, Git, database or npm install is needed for the release ZIP.**
